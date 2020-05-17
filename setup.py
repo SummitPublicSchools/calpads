@@ -17,7 +17,9 @@ setup(
     license=lic,
     url="https://github.com/yo-my-bard/calpads",
     packages=find_packages(include=["calpads"]),
+    python_requires=">=3.6", #Might be able to support earlier versions, but would have to see
     install_requires=[
-    "beautifulsoup4>=4.8.0, <5.0.0" #Might not need 4.8.0 exactly, but for now
+    "beautifulsoup4>=4.8.0, <5.0.0", #Might not need 4.8.0 exactly, but for now
+    "requests>=2.22.0, <3.0.0"
     ]
 )
