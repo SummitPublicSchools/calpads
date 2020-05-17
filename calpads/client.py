@@ -1,11 +1,13 @@
 import requests
 import logging
+from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qs, urljoin
 from bs4 import BeautifulSoup, Tag
 
 
 class CALPADSClient:
 
     def __init__(self, username, password):
+        self.host = "https://www.calpads.org"
         self.username = username
         self.password = password
         self.credentials = {'Username': self.username,
@@ -19,7 +21,7 @@ class CALPADSClient:
         self.log.addHandler(stream_hdlr)
 
     def login(self):
-        init_response = self.session.get("https://www.calpads.org")
+        init_response = self.session.get(self.host)
         self.session.cookies.update(init_response.cookies.get_dict())
         self.log.debug(init_response.url)
 
@@ -35,8 +37,9 @@ class CALPADSClient:
                                                      ).get('value')
         self.credentials['AgreementConfirmed'] = "True"
 
-        login_response = self.session.post(init_response.url,
+        login_response = self.session.post(urljoin(self.host, init_response.url),
                                            data=self.credentials)
+        
         self.session.cookies.update(login_response.cookies.get_dict())
 
         login_bs = BeautifulSoup(login_response.content,
@@ -46,7 +49,7 @@ class CALPADSClient:
         #Interstitial OpenID Page
         openid_form_data = {input_['name']: input_.get("value") for input_ in login_bs.find_all('input')}
 
-        homepage_response = self.session.post(login_bs.find('form')['action'],
+        homepage_response = self.session.post(urljoin(self.host, login_bs.find('form')['action']),
                                               data=openid_form_data
                                               )
         self.log.info(homepage_response)
