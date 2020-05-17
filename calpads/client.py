@@ -12,36 +12,43 @@ class CALPADSClient:
                             'Password': self.password}
         self.session = requests.Session()
         self.session.headers.update({'User-Agent': None})
+        self.log = logging.getLogger(__name__)
+        log_fmt = f'%(levelname)s: %(asctime)s {self.__class__.__name__}.%(funcName)s: %(message)s'
+        stream_hdlr = logging.StreamHandler()
+        stream_hdlr.setFormatter(logging.Formatter(fmt=log_fmt))
+        self.log.addHandler(stream_hdlr)
 
     def login(self):
         init_response = self.session.get("https://www.calpads.org")
-        self.session.cookies.update(init_response.cookies)
-        logging.info(init_response.url)
+        self.session.cookies.update(init_response.cookies.get_dict())
+        self.log.debug(init_response.url)
 
-        init_bs = BeautifulSoup(init_response.content)
+        init_bs = BeautifulSoup(init_response.content,
+                                features='html.parser')
 
         #Filling the login form
         self.credentials['__RequestVerificationToken'] = init_bs.find('input',
                                                                       attrs={'name': "__RequestVerificationToken"}
-                                                                      )['value']
+                                                                      ).get('value')
         self.credentials['ReturnUrl'] = init_bs.find('input',
                                                      attrs={'id': 'ReturnUrl'}
-                                                     )['value']
+                                                     ).get('value')
         self.credentials['AgreementConfirmed'] = "True"
 
         login_response = self.session.post(init_response.url,
                                            data=self.credentials)
-        self.session.cookies.update(login_response)
+        self.session.cookies.update(login_response.cookies.get_dict())
 
-        login_bs = BeautifulSoup(login_response.content)
-        logging.info(login_response)
+        login_bs = BeautifulSoup(login_response.content,
+                                 features='html.parser')
+        self.log.debug(login_response.url)
 
         #Interstitial OpenID Page
-        openid_form_data = {input_['name']: input_["value"] for input_ in login_bs.find_all('input')}
+        openid_form_data = {input_['name']: input_.get("value") for input_ in login_bs.find_all('input')}
 
         homepage_response = self.session.post(login_bs.find('form')['action'],
                                               data=openid_form_data
                                               )
-        logging.info(homepage_response)
+        self.log.info(homepage_response)
 
         return homepage_response.ok
