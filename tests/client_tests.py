@@ -26,7 +26,6 @@ class CALPADSTest(unittest.TestCase):
         # debug outputs too which will be super handy!
         rootlog.addFilter(logging.Filter('calpads.client'))
 
-
     def tearDown(self):
         self.cp_client.session.close()
 
@@ -35,7 +34,6 @@ class ClientTest(CALPADSTest):
 
     def test_successful_login(self):
         self.assertTrue(self.cp_client.login())
-
 
     def test_successful_connection(self):
         self.cp_client.login()
@@ -46,3 +44,47 @@ class ClientTest(CALPADSTest):
         self.cp_client.username = 'BAD USER'
         with self.assertRaises(RecursionError):
             self.cp_client.login()
+
+    def test_get_leas(self):
+        #Wouldn't be shocked if this fails if the specification changes on CALPADS' end
+        self.assertIsInstance(self.cp_client.get_leas(), list)
+
+    def test_get_elas_history(self):
+        self.assertIsInstance(self.cp_client.get_elas_history(1), dict)
+
+    def test_get_enrollment_history(self):
+        self.assertIsInstance(self.cp_client.get_enrollment_history(1), dict)
+
+    def test_get_demographics_history(self):
+        self.assertIsInstance(self.cp_client.get_elas_history(1), dict)
+
+    def test_get_address_history(self):
+        self.assertIsInstance(self.cp_client.get_address_history(1), dict)
+
+    def test_get_program_history(self):
+        self.assertIsInstance(self.cp_client.get_program_history(1), dict)
+
+    def test_get_student_course_section_history(self):
+        self.assertIsInstance(self.cp_client.get_student_course_section_history(1), dict)
+
+    def test_get_cte_history(self):
+        self.assertIsInstance(self.cp_client.get_cte_history(1), dict)
+
+    def test_get_stas_history(self):
+        self.assertIsInstance(self.cp_client.get_stas_history(1), dict)
+
+    def test_get_sirs_history(self):
+        self.assertIsInstance(self.cp_client.get_sirs_history(1), dict)
+
+    def test_get_soff_history(self):
+        self.assertIsInstance(self.cp_client.get_soff_history(1), dict)
+
+    def test_get_sped_history(self):
+        self.assertIsInstance(self.cp_client.get_sped_history(1), dict)
+
+    def test_get_ssrv_history(self):
+        self.assertIsInstance(self.cp_client.get_ssrv_history(1), dict)
+
+    def test_get_psts_history(self):
+        self.assertIsInstance(self.cp_client.get_psts_history(1), dict)
+

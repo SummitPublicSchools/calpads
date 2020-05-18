@@ -1,5 +1,6 @@
 import requests
 import logging
+import json
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qs, urljoin
 from bs4 import BeautifulSoup, Tag
 
@@ -40,6 +41,144 @@ class CALPADSClient:
     @property
     def is_connected(self):
         return self.__connection_status #Unclear, but there is a chance this returns a false positive
+
+    def get_leas(self):
+        """Returns the list of LEAs provided by CALPADS
+        Returns:
+            list of LEA dictionaries with the keys Disabled, Group, Selected, Text, Value
+        """
+        response = self.session.get(urljoin(self.host, 'Leas?format=JSON'))
+        return json.loads(response.content)
+
+    def get_enrollment_history(self, ssid):
+        """Returns a JSON object with the Enrollment history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Enrollment?format=JSON'))
+        return json.loads(response.content)
+
+    def get_demographics_history(self, ssid):
+        """Returns a JSON object with the Demographics history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Demographics?format=JSON'))
+        return json.loads(response.content)
+
+    def get_address_history(self, ssid):
+        """Returns a JSON object with the Address history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Address?format=JSON'))
+        return json.loads(response.content)
+
+    def get_elas_history(self, ssid):
+        """Returns a JSON object with the English Language Acquisition Status (ELAS) history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/EnglishLanguageAcquisition?format=JSON'))
+        return json.loads(response.content)
+
+    def get_program_history(self, ssid):
+        """Returns a JSON object with the Program history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count/Total keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Program?format=JSON'))
+        return json.loads(response.content)
+
+    def get_student_course_section_history(self, ssid):
+        """Returns a JSON object with the Student Course Section history (SCSE, SCSC) for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/StudentCourseSection?format=JSON'))
+        return json.loads(response.content)
+
+    def get_cte_history(self, ssid):
+        """Returns a JSON object with the Career Technical Education (CTE) history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/CareerTechnicalEducation?format=JSON'))
+        return json.loads(response.content)
+
+    def get_stas_history(self, ssid):
+        """Returns a JSON object with the Student Absence Summary (STAS) history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/StudentAbsenceSummary?format=JSON'))
+        return json.loads(response.content)
+
+    def get_sirs_history(self, ssid):
+        """Returns a JSON object with the Student Incident Result (SIRS) history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/StudentIncidentResult?format=JSON'))
+        return json.loads(response.content)
+
+    def get_soff_history(self, ssid):
+        """Returns a JSON object with the Student Offense (SOFF) history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Offense?format=JSON'))
+        return json.loads(response.content)
+
+    def get_sped_history(self, ssid):
+        """Returns a JSON object with the Special Education (SPED) history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/SPED?format=JSON'))
+        return json.loads(response.content)
+
+    def get_ssrv_history(self, ssid):
+        """Returns a JSON object with the Student Services (SSRV) history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/SSRV?format=JSON'))
+        return json.loads(response.content)
+
+    def get_psts_history(self, ssid):
+        """Returns a JSON object with the Postsecondary Transition Status (PSTS) history for the provided SSID
+
+        Returns:
+            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
+            item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/PSTS?format=JSON'))
+        return json.loads(response.content)
 
     def _handle_event_hooks(self, r, *args, **kwargs):
         self.log.debug(("Response STATUS CODE: {}\nChecking hooks for: \n{}\n"
