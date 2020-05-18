@@ -35,3 +35,14 @@ class ClientTest(CALPADSTest):
 
     def test_successful_login(self):
         self.assertTrue(self.cp_client.login())
+
+
+    def test_successful_connection(self):
+        self.cp_client.login()
+        self.assertTrue(self.cp_client.is_connected)
+
+    @unittest.skip("This isn't quite ready for a unittest. Might need to remove the self.login call at instantiation")
+    def test_invalid_login(self):
+        self.cp_client.username = 'BAD USER'
+        with self.assertRaises(RecursionError):
+            self.cp_client.login()
