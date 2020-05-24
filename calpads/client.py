@@ -5,7 +5,6 @@ import re
 import unicodedata
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl, urljoin
 from collections import deque
-from bs4 import BeautifulSoup, Tag
 from lxml import etree
 from .reports_form import ReportsForm, REPORTS_DL_FORMAT
 
@@ -184,50 +183,41 @@ class CALPADSClient:
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/PSTS?format=JSON'))
         return json.loads(response.content)
 
-    def download_ods_report(self, report_code, file_name, download_format='CSV', form_data=None, dry_run=False):
+    def download_report(self, report_code, file_name, is_snapshot=False, download_format='CSV',
+                        form_data=None, dry_run=False):
         if not REPORTS_DL_FORMAT.get(download_format.upper()):
             self.log.info('{} is not a supported reports download format. Try: {}'
                           .format(download_format, ' '.join(REPORTS_DL_FORMAT.keys())))
             raise Exception('Bad download format')
         with self.session as session:
-            report_url = self._get_report_link(report_code.lower())
+            report_url = self._get_report_link(report_code.lower(), is_snapshot)
             if report_url:
                 session.get(report_url)
             else:
                 raise Exception("Report Not Found")
-            iframe_url = BeautifulSoup(self.visit_history[-1].text, parser="lxml").find('iframe').get('src')
+            report_page_root = etree.fromstring(self.visit_history[-1].text, parser=etree.HTMLParser(encoding='utf8'))
+            iframe_url = report_page_root.xpath("//iframe[@src and not(contains(@src, 'KeepAlive'))]")[0].attrib['src']
+            #self.log.debug(iframe_url)
             session.get(iframe_url)
-            #Parse Form Data Hereabouts
             form = ReportsForm(self.visit_history[-1].text)
             if dry_run:
                 return form.filtered_parse
 
             if form_data:
-                formatted_form_data = form.fill_form(form_data)
+                formatted_form_data = form.get_final_form_data(form_data)
             else:
-                formatted_form_data = dict()
-
-            all_with_names = BeautifulSoup(self.visit_history[-1].text, parser="lxml").find_all(lambda x: x.has_attr('name'))
-
-            form_inputs_to_keep = ['__VIEWSTATE', '__VIEWSTATEGENERATOR', '__EVENTVALIDATION']
-            form_inputs_endings = ('HiddenIndices', 'txtValue', 'ddValue')
-
-            in_expected_keys = [tag for tag in all_with_names if tag['name'] in form_inputs_to_keep
-                                or tag['name'].endswith(form_inputs_endings)]
-            in_expected_keys_names = [tag['name'] for tag in in_expected_keys]
-            values_in_expected_key_tags = [tag.get('value', '') for tag in in_expected_keys]
-            default_form_data = dict(zip(in_expected_keys_names, values_in_expected_key_tags))
-            default_form_data.update(formatted_form_data)
+                self.log.warning("Most report forms require at least some input, especially for Select form fields.")
+                formatted_form_data = form.get_final_form_data(dict())
 
             # TODO: Test how form data treats None or False diferently from empty string
-            submitted_form_data = {k: v for k, v in default_form_data.items() if v != ''}
+            submitted_form_data = {k: v for k, v in formatted_form_data.items() if v != ''}
 
             #self.log.debug('The form data about to be submitted: \n{}\n'.format(submitted_form_data))
             #TODO: Document that it seems like at a minimum all "select" fields need to have values provided for
             #Alternatively, provide default values
-            session.post(self.visit_history[-1].url,
-                         data=submitted_form_data)
+            session.post(self.visit_history[-1].url, data=submitted_form_data)
 
+            # Regex for grabbing the base, direct download URL for the report
             regex = re.compile('(?<="ExportUrlBase":")[^"]+(?=")')  # Look for text sandwitched between the lookbehind and
             # the lookahead, but EXCLUDE the double quotes (i.e. find the first double quotes as the upper limit of the text)
 
@@ -235,26 +225,25 @@ class CALPADSClient:
             if regex.search(self.visit_history[-1].text):
                 self.log.debug('Found ExportUrlBase in the URL')
                 export_url_base = regex.search(self.visit_history[-1].text).group(0)
-                q = urlsplit(urljoin("https://reports.calpads.org",
-                                     export_url_base)
-                             .replace('\\u0026', '&')
-                             .replace('%3a', ':')
-                             .replace('%2f', '/')
-                             ).query
-                split_query = parse_qsl(q)
+                scheme, netloc, path, query, frag = urlsplit(urljoin("https://reports.calpads.org",
+                                                                     export_url_base)
+                                                             .replace('\\u0026', '&')
+                                                             .replace('%3a', ':')
+                                                             .replace('%2f', '/'))
+                split_query = parse_qsl(query)
 
             if split_query:
                 self.log.debug("Adding Format parameter to the URL")
                 split_query.append(('Format', REPORTS_DL_FORMAT[download_format.upper()]))
-                self.log.debug("Rejoining the query elements again again")
-                scheme, netloc, path, query, frag = urlsplit(urljoin("https://reports.calpads.org",
-                                                                     export_url_base))
-
+                self.log.debug("Rejoining the query elements again")
                 report_dl_url = urlunsplit([scheme, netloc, path, urlencode(split_query), frag])
                 session.get(report_dl_url)
                 with open(file_name, 'wb') as f:
                     f.write(self.visit_history[-1].content)
-                    return "We did that yo!"
+                    return True
+
+            #If you made it this far, something went wrong.
+            return False
 
     def _get_report_link(self, report_code, is_snapshot=False):
         #TODO: Lowercase report_code either here or in whatever ends up calling it
@@ -285,15 +274,16 @@ class CALPADSClient:
         if path == '/Account/Login' and r.status_code == 200:
             self.log.debug("Handling /Account/Login")
             self.session.cookies.update(r.cookies.get_dict()) #Update the cookies for future requests
-            init_bs = BeautifulSoup(r.content,
-                                    features='html.parser')
+            init_root = etree.fromstring(r.text, parser=etree.HTMLParser(encoding='utf8'))
             # Filling the login form
-            self.credentials['__RequestVerificationToken'] = init_bs.find('input',
-                                                                          attrs={'name': "__RequestVerificationToken"}
-                                                                          ).get('value')
-            self.credentials['ReturnUrl'] = init_bs.find('input',
-                                                         attrs={'id': 'ReturnUrl'}
-                                                         ).get('value')
+            self.credentials['__RequestVerificationToken'] = (init_root
+                                                              .xpath("//input[@name='__RequestVerificationToken']")[0]
+                                                              .get('value'))
+
+            self.credentials['ReturnUrl'] = (init_root
+                                              .xpath("//input[@id='ReturnUrl']")[0]
+                                              .get('value'))
+
             self.credentials['AgreementConfirmed'] = "True"
 
             # self.log.debug(self.credentials)
@@ -305,21 +295,22 @@ class CALPADSClient:
         elif path in ['/connect/authorize/callback', '/connect/authorize'] and r.status_code == 200:
             self.log.debug("Handling /connect/authorize/callback")
             self.session.cookies.update(r.cookies.get_dict()) #Update the cookies for future requests
-            login_bs = BeautifulSoup(r.content,
-                                     features='html.parser')
+            login_root = etree.fromstring(r.text, parser=etree.HTMLParser(encoding='utf8'))
 
             # Interstitial OpenID Page
-            openid_form_data = {input_['name']: input_.get("value") for input_ in login_bs.find_all('input')}
+            openid_form_data = {input_.attrib.get('name'): input_.attrib.get("value") for input_ in login_root.xpath('//input')}
+            action_url = login_root.xpath('//form')[0].attrib.get('action')
 
             #A check for the when to try to join on self.host
-            if (not urlsplit(login_bs.find('form')['action']).scheme
-                and not urlsplit(login_bs.find('form')['action']).netloc):
-                self.session.post(urljoin(self.host, login_bs.find('form')['action']),
+            scheme, netloc, path, query, frag = urlsplit(action_url)
+            if (not scheme and not netloc):
+                self.session.post(urljoin(self.host, action_url),
                                   data=openid_form_data
                                 )
             else:
-                self.log.debug("Using the action URL from the OpenID interstitial page")
-                self.session.post(login_bs.find('form')['action'],
+                self.log.debug("Using the action URL from the OpenID interstitial page: {}"
+                               .format(action_url))
+                self.session.post(action_url,
                                   data=openid_form_data
                                   )
         else:

@@ -39,7 +39,7 @@ class ReportsForm:
     def parse_the_form(self):
         all_form_elements = self.root.xpath("//*[@data-parametername]")
         params_dict = dict.fromkeys([tag.attrib['data-parametername'] for tag in all_form_elements])
-        self.log.debug('This is the init params_dict: \n{}'.format(params_dict))
+        #self.log.debug('This is the init params_dict: \n{}'.format(params_dict))
         for element in all_form_elements:
             tag_combos = []
             key = element.attrib['data-parametername']
@@ -107,6 +107,19 @@ class ReportsForm:
 
         return filtered_dict
 
+    def get_default_form_data(self):
+        """The default form data comes with all "dropdown" fields pre-filled, but requires inputs for other fields"""
+        all_with_names = self.root.xpath('//*[@name]')
+        # self.log.debug(all_with_names)
+        form_inputs_to_keep = ['__VIEWSTATE', '__VIEWSTATEGENERATOR', '__EVENTVALIDATION']
+        form_inputs_endings = ('HiddenIndices', 'txtValue', 'ddValue')
+
+        in_expected_keys = [tag for tag in all_with_names if tag.attrib['name'] in form_inputs_to_keep
+                            or tag.attrib['name'].endswith(form_inputs_endings)]
+        in_expected_keys_names = [tag.attrib['name'] for tag in in_expected_keys]
+        values_in_expected_key_tags = [tag.attrib.get('value', '') for tag in in_expected_keys]
+        return dict(zip(in_expected_keys_names, values_in_expected_key_tags))
+
     def fill_form(self, form_data):
         to_submit = dict()
         for paramname, paramvalue in form_data.items():
@@ -137,7 +150,7 @@ class ReportsForm:
                                     formval += valid_dict[checkbox][2]
                     if formval == '':
                         self.log.info("Provided {} input was not processed: {}"
-                                      .format(paramvalue, paramname))
+                                      .format(paramname, paramvalue))
                         continue
                     to_submit[formname] = formval
                 elif self.complete_parse[paramname][1][0] in ('textbox', 'textbox_defaultnull'): #TODO: defaultnull still needs testing
@@ -146,3 +159,9 @@ class ReportsForm:
             else:
                 self.log.info("Provided input was not processed: {}".format(paramname))
         return to_submit
+
+    def get_final_form_data(self, form_data):
+        # Update the default form data with what the user has provided
+        final_form = self.get_default_form_data()
+        final_form.update(self.fill_form(form_data))
+        return final_form
