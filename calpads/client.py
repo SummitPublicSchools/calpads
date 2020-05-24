@@ -2,6 +2,7 @@ import requests
 import logging
 import json
 import re
+import unicodedata
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl, urljoin
 from collections import deque
 from bs4 import BeautifulSoup, Tag
@@ -191,6 +192,9 @@ class CALPADSClient:
                 raise Exception("Report Not Found")
             iframe_url = BeautifulSoup(self.visit_history[-1].text, parser="lxml").find('iframe').get('src')
             session.get(iframe_url)
+            #Parse Form Data Hereabouts
+            #
+            return self._parse_report_form()
             all_with_names = BeautifulSoup(self.visit_history[-1].text, parser="lxml").find_all(lambda x: x.has_attr('name'))
 
             form_inputs_to_keep = ['__VIEWSTATE', '__VIEWSTATEGENERATOR', '__EVENTVALIDATION']
@@ -268,6 +272,48 @@ class CALPADSClient:
                         return urljoin(self.host, element.xpath('./../../a')[0].attrib['href'])
                 #TODO: Write this exception in an exceptions.py
                 #raise ReportNotFound('{} report code cannot be found on the webpage'.format(report_code))
+
+    def _parse_report_form(self):
+        """Parse and when it's not a dry run, fill in the form."""
+
+        self.log.debug('Started parsing the form')
+        root = etree.fromstring(self.visit_history[-1].text,
+                                             parser=etree.HTMLParser(encoding='utf8'))
+        all_form_elements = root.xpath("//*[@data-parametername]")
+        params_dict = dict.fromkeys([tag.attrib['data-parametername'] for tag in all_form_elements])
+        self.log.debug('This is the init params_dict: {}'.format(params_dict))
+        for element in all_form_elements:
+            tag_combos = []
+            key = element.attrib['data-parametername']
+            for child in element.xpath('.//*'):
+                tag_combos.append(
+                    child.tag)  # Find all the tags that are under the parameter div (i.e. where the form field is located)
+                if child.tag == 'span' and 'calendar' in child['class']:
+                    tag_combos = tag_combos[
+                                 :-2]  # If it's a calendar date input, remove the last two tags so it's treated like a textbox
+            params_dict[key] = [tuple(tag_combos)]
+
+        for parametername, param_values in params_dict.items():
+            if param_values[0][0] == 'select':
+                select = root.xpath("//*[@data-parametername='{}']//select".format(parametername))[0]
+                param_values.append(('select', tuple(unicodedata.normalize('NFKC', option.text) for option in select.xpath('.//*'))))
+
+            elif param_values[0][-1] == 'input':
+                param_values.append(('textbox', 'plain text'))
+
+            elif param_values[0][-1] == 'label':
+                param_values.append(('textbox_defaultnull', 'plain text'))
+
+            else:
+                form_input_div = root.xpath("//*[@data-parametername='{}']".format(parametername))[0]
+                div_id = form_input_div.attrib['id'] + '_divDropDown'
+                all_input_labels = root.xpath('//*[contains(@for, "{}")]'.format(div_id))
+                all_input_labels_txt = [unicodedata.normalize('NFKC', label.text) for label in all_input_labels
+                                        if unicodedata.normalize('NFKC', label.text) != '(Select All)']
+                dict_opts = dict.fromkeys(all_input_labels_txt, (True, False))
+                param_values.append(('dropdown', dict_opts))
+
+        return params_dict
 
     def _handle_event_hooks(self, r, *args, **kwargs):
         self.log.debug(("Response STATUS CODE: {}\nChecking hooks for: \n{}\n"
