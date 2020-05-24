@@ -7,7 +7,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl, urljoin
 from collections import deque
 from bs4 import BeautifulSoup, Tag
 from lxml import etree
-from .reports_form import ReportsForm
+from .reports_form import ReportsForm, REPORTS_DL_FORMAT
 
 
 class CALPADSClient:
@@ -184,7 +184,11 @@ class CALPADSClient:
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/PSTS?format=JSON'))
         return json.loads(response.content)
 
-    def download_ods_report(self, report_code, file_name, form_data=None, dry_run=False):
+    def download_ods_report(self, report_code, file_name, download_format='CSV', form_data=None, dry_run=False):
+        if not REPORTS_DL_FORMAT.get(download_format.upper()):
+            self.log.info('{} is not a supported reports download format. Try: {}'
+                          .format(download_format, ' '.join(REPORTS_DL_FORMAT.keys())))
+            raise Exception('Bad download format')
         with self.session as session:
             report_url = self._get_report_link(report_code.lower())
             if report_url:
@@ -198,6 +202,10 @@ class CALPADSClient:
             if dry_run:
                 return form.filtered_parse
 
+            if form_data:
+                formatted_form_data = form.fill_form(form_data)
+            else:
+                formatted_form_data = dict()
 
             all_with_names = BeautifulSoup(self.visit_history[-1].text, parser="lxml").find_all(lambda x: x.has_attr('name'))
 
@@ -208,26 +216,17 @@ class CALPADSClient:
                                 or tag['name'].endswith(form_inputs_endings)]
             in_expected_keys_names = [tag['name'] for tag in in_expected_keys]
             values_in_expected_key_tags = [tag.get('value', '') for tag in in_expected_keys]
-            form_data = dict(zip(in_expected_keys_names, values_in_expected_key_tags))
-            prefilled_values = {"ReportViewer1$ctl08$ctl03$ddValue": 3,
-                                "ReportViewer1$ctl08$ctl05$ddValue": 5,
-                                "ReportViewer1$ctl08$ctl07$ddValue": 19,
-                                "ReportViewer1$ctl08$ctl09$ddValue": 1,
-                                "ReportViewer1$ctl08$ctl23$ddValue": 1,
-                                "ReportViewer1$ctl08$ctl11$divDropDown$ctl01$HiddenIndices": '0,1',
-                                "ReportViewer1$ctl08$ctl13$divDropDown$ctl01$HiddenIndices": '2',
-                                "ReportViewer1$ctl08$ctl15$divDropDown$ctl01$HiddenIndices": '5,6,7',
-                                "ReportViewer1$ctl08$ctl17$divDropDown$ctl01$HiddenIndices": '0',
-                                "ReportViewer1$ctl08$ctl19$divDropDown$ctl01$HiddenIndices": '0,1',
-                                "ReportViewer1$ctl08$ctl21$divDropDown$ctl01$HiddenIndices": '0,1,2,3'
-                                }
-            form_data.update(prefilled_values)
+            default_form_data = dict(zip(in_expected_keys_names, values_in_expected_key_tags))
+            default_form_data.update(formatted_form_data)
 
             # TODO: Test how form data treats None or False diferently from empty string
-            form_data = {k: v for k, v in form_data.items() if v != ''}
+            submitted_form_data = {k: v for k, v in default_form_data.items() if v != ''}
 
+            #self.log.debug('The form data about to be submitted: \n{}\n'.format(submitted_form_data))
+            #TODO: Document that it seems like at a minimum all "select" fields need to have values provided for
+            #Alternatively, provide default values
             session.post(self.visit_history[-1].url,
-                         data=form_data)
+                         data=submitted_form_data)
 
             regex = re.compile('(?<="ExportUrlBase":")[^"]+(?=")')  # Look for text sandwitched between the lookbehind and
             # the lookahead, but EXCLUDE the double quotes (i.e. find the first double quotes as the upper limit of the text)
@@ -246,7 +245,7 @@ class CALPADSClient:
 
             if split_query:
                 self.log.debug("Adding Format parameter to the URL")
-                split_query.append(('Format', "PDF"))
+                split_query.append(('Format', REPORTS_DL_FORMAT[download_format.upper()]))
                 self.log.debug("Rejoining the query elements again again")
                 scheme, netloc, path, query, frag = urlsplit(urljoin("https://reports.calpads.org",
                                                                      export_url_base))

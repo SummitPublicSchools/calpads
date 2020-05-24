@@ -10,6 +10,16 @@ import logging
 import unicodedata
 from lxml import etree
 
+REPORTS_DL_FORMAT = {'CSV': 'CSV',
+                     'WORD': 'WORDOPENXML',
+                     'EXCEL': 'EXCELOPENXML',
+                     'POWERPOINT': 'PPTX',
+                     'PDF': 'PDF',
+                     'TIFF': 'IMAGE',
+                     'MHTML': 'MHTML',
+                     'XML': 'XML',
+                     'DATAFEED': 'ATOM'}
+
 class ReportsForm:
 
     def __init__(self, page_source):
@@ -64,8 +74,9 @@ class ReportsForm:
                                      ))
 
             elif param_values[0][-1] == 'label':
-                param_values.append(
-                    ('textbox_defaultnull', 'plain text'))  # TODO: Test out how to get the name value for this case
+                param_values.append(('textbox_defaultnull', ('plain text',
+                                                             '') # TODO: Test out how to get the name value for this case
+                                     ))
 
             else:
                 form_input_div = self.root.xpath("//*[@data-parametername='{}']".format(parametername))[0]
@@ -95,3 +106,43 @@ class ReportsForm:
                 filtered_dict[paramname] = ("You can insert any string here",)
 
         return filtered_dict
+
+    def fill_form(self, form_data):
+        to_submit = dict()
+        for paramname, paramvalue in form_data.items():
+            #Check if the key that the user provided is expected, otherwise log and do nothing
+            if self.complete_parse.get(paramname):
+                if self.complete_parse[paramname][1][0] == 'select':
+                    #self.log.debug(self.complete_parse[paramname][1][1])
+                    formname = self.complete_parse[paramname][1][1][0][1] #TODO: Make value easier to get?
+                    formval = None
+                    for val_tuple in self.complete_parse[paramname][1][1]:
+                        if val_tuple[0].lower() == paramvalue.lower():
+                            formval = val_tuple[2]
+                    if formval is None:
+                        self.log.info("Provided {} input was not processed: {}"
+                                      .format(paramname, paramvalue))
+                        continue
+                    to_submit[formname] = formval
+                elif self.complete_parse[paramname][1][0] == 'dropdown':
+                    valid_dict = self.complete_parse[paramname][1][1]
+                    formname = valid_dict[list(valid_dict.keys())[0]][1] #TODO: Maybe we should make this value easier to get?
+                    formval = ''
+                    for checkbox, checked in paramvalue.items():
+                        if checkbox in valid_dict.keys():
+                            if checked: #Double checking that the user sent True/truthy value
+                                if formval:
+                                    formval = ','.join([formval, valid_dict[checkbox][2]])
+                                else:
+                                    formval += valid_dict[checkbox][2]
+                    if formval == '':
+                        self.log.info("Provided {} input was not processed: {}"
+                                      .format(paramvalue, paramname))
+                        continue
+                    to_submit[formname] = formval
+                elif self.complete_parse[paramname][1][0] in ('textbox', 'textbox_defaultnull'): #TODO: defaultnull still needs testing
+                    formname = self.complete_parse[paramname][1][1]
+                    to_submit[formname] = paramvalue
+            else:
+                self.log.info("Provided input was not processed: {}".format(paramname))
+        return to_submit
