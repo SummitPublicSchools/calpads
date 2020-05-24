@@ -238,6 +238,9 @@ class CALPADSClient:
                 self.log.debug("Rejoining the query elements again")
                 report_dl_url = urlunsplit([scheme, netloc, path, urlencode(split_query), frag])
                 session.get(report_dl_url)
+                # Cautionary Tale here if the content is compressed:
+                # https://stackoverflow.com/a/50825553
+                # Might need to revisit later
                 with open(file_name, 'wb') as f:
                     f.write(self.visit_history[-1].content)
                     return True
