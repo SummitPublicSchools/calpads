@@ -34,6 +34,7 @@ class ReportsForm:
         stream_hdlr.setFormatter(logging.Formatter(fmt=log_fmt))
         self.log.addHandler(stream_hdlr)
         self.complete_parse = self.parse_the_form()
+        #self.log.debug(self.complete_parse)
         self.filtered_parse = self.filter_parsed_form()
 
     def parse_the_form(self):
@@ -46,7 +47,7 @@ class ReportsForm:
             for child in element.xpath('.//*'):
                 tag_combos.append(
                     child.tag)  # Find all the tags that are under the parameter div (i.e. where the form field is located)
-                if child.tag == 'span' and 'calendar' in child['class']:
+                if 'calendar' in child.attrib.get('class', ''):
                     tag_combos = tag_combos[
                                  :-2]  # If it's a calendar date input, remove the last two tags so it's treated like a textbox
             params_dict[key] = [tuple(tag_combos)]
