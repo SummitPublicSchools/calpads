@@ -28,12 +28,13 @@ class CALPADSClient:
         stream_hdlr.setFormatter(logging.Formatter(fmt=log_fmt))
         self.log.addHandler(stream_hdlr)
         try:
-            self.__connection_status = self.login()
+            self.__connection_status = self._login()
         except RecursionError:
             self.log.info("Looks like the provided credentials might be incorrect. Confirm credentials.")
 
 
-    def login(self):
+    def _login(self):
+        """Login method which generally doesn't need to be called except when initializing the client."""
         #Dance the OAuth Dance
         self.session.get(self.host)
         # self.log.debug(homepage_response.url)
@@ -43,6 +44,7 @@ class CALPADSClient:
 
     @property
     def is_connected(self):
+        """User exposed attribute to check whether the client successfully connected. Might return false positives."""
         return self.__connection_status #Unclear, but there is a chance this returns a false positive
 
     def get_leas(self):
@@ -56,9 +58,12 @@ class CALPADSClient:
     def get_enrollment_history(self, ssid):
         """Returns a JSON object with the Enrollment history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Enrollment?format=JSON'))
         return json.loads(response.content)
@@ -66,9 +71,12 @@ class CALPADSClient:
     def get_demographics_history(self, ssid):
         """Returns a JSON object with the Demographics history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Demographics?format=JSON'))
         return json.loads(response.content)
@@ -76,9 +84,12 @@ class CALPADSClient:
     def get_address_history(self, ssid):
         """Returns a JSON object with the Address history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Address?format=JSON'))
         return json.loads(response.content)
@@ -86,9 +97,12 @@ class CALPADSClient:
     def get_elas_history(self, ssid):
         """Returns a JSON object with the English Language Acquisition Status (ELAS) history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/EnglishLanguageAcquisition?format=JSON'))
         return json.loads(response.content)
@@ -96,9 +110,12 @@ class CALPADSClient:
     def get_program_history(self, ssid):
         """Returns a JSON object with the Program history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count/Total keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Program?format=JSON'))
         return json.loads(response.content)
@@ -106,9 +123,12 @@ class CALPADSClient:
     def get_student_course_section_history(self, ssid):
         """Returns a JSON object with the Student Course Section history (SCSE, SCSC) for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/StudentCourseSection?format=JSON'))
         return json.loads(response.content)
@@ -116,9 +136,12 @@ class CALPADSClient:
     def get_cte_history(self, ssid):
         """Returns a JSON object with the Career Technical Education (CTE) history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/CareerTechnicalEducation?format=JSON'))
         return json.loads(response.content)
@@ -126,9 +149,12 @@ class CALPADSClient:
     def get_stas_history(self, ssid):
         """Returns a JSON object with the Student Absence Summary (STAS) history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/StudentAbsenceSummary?format=JSON'))
         return json.loads(response.content)
@@ -136,9 +162,12 @@ class CALPADSClient:
     def get_sirs_history(self, ssid):
         """Returns a JSON object with the Student Incident Result (SIRS) history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/StudentIncidentResult?format=JSON'))
         return json.loads(response.content)
@@ -146,9 +175,12 @@ class CALPADSClient:
     def get_soff_history(self, ssid):
         """Returns a JSON object with the Student Offense (SOFF) history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Offense?format=JSON'))
         return json.loads(response.content)
@@ -156,9 +188,12 @@ class CALPADSClient:
     def get_sped_history(self, ssid):
         """Returns a JSON object with the Special Education (SPED) history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/SPED?format=JSON'))
         return json.loads(response.content)
@@ -166,9 +201,12 @@ class CALPADSClient:
     def get_ssrv_history(self, ssid):
         """Returns a JSON object with the Student Services (SSRV) history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/SSRV?format=JSON'))
         return json.loads(response.content)
@@ -176,20 +214,47 @@ class CALPADSClient:
     def get_psts_history(self, ssid):
         """Returns a JSON object with the Postsecondary Transition Status (PSTS) history for the provided SSID
 
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
         Returns:
-            a JSON object with Data and Total Count keys. Expected data is under Data as a List where each
-            item is a "row" of data
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/PSTS?format=JSON'))
         return json.loads(response.content)
 
-    def download_report(self, report_code, file_name, is_snapshot=False, download_format='CSV',
-                        form_data=None, dry_run=False):
+    def download_report(self, lea_code, report_code, file_name, is_snapshot=False,
+                        download_format='CSV', form_data=None, dry_run=False):
+        """Download CALPADS ODS or Snapshot Reports
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+            report_code (str): Currently supports all known reports. Expected format is a string e.g. '8.1', '1.17', and '1.18'.
+                For reports that have letters in them, for example the 8.1 EOY3, expected input is '8.1eoy3' OR '8.1EOY3'.
+                No spaces, all one word.
+            file_name (str): the name of the file to pass to open(file_name, 'wb'). Assumes any subdirectories
+                parent directories referenced in the file name already exist.
+            is_snapshot (bool): when True downloads the Snapshot Report. When False, downloads the ODS Report.
+            download_format (str): The format in which you want the download for the report.
+                Currently supports: csv, excel, pdf, word, powerpoint, tiff, mhtml, xml, datafeed
+            form_data (dict): the data that should be sent with the form request. Usually, all select fields for the
+                form need to be provided. To see list of valid values, set dry_run=True.
+            dry_run (bool): when False, it downloads the report. When True, it doesn't download the report and instead
+                returns a dict with the form fields and their expected inputs.
+
+        Returns:
+            bool: True for a successful download of report, else False.
+            dict: when dry_run=True, it returns a dict of the form fields and their expected inputs for report manipulation
+
+        """
         if not REPORTS_DL_FORMAT.get(download_format.upper()):
             self.log.info('{} is not a supported reports download format. Try: {}'
                           .format(download_format, ' '.join(REPORTS_DL_FORMAT.keys())))
             raise Exception('Bad download format')
         with self.session as session:
+            self._select_lea(lea_code)
             report_url = self._get_report_link(report_code.lower(), is_snapshot)
             if report_url:
                 session.get(report_url)
@@ -218,7 +283,7 @@ class CALPADSClient:
             session.post(self.visit_history[-1].url, data=submitted_form_data)
 
             # Regex for grabbing the base, direct download URL for the report
-            regex = re.compile('(?<="ExportUrlBase":")[^"]+(?=")')  # Look for text sandwitched between the lookbehind and
+            regex = re.compile('(?<="ExportUrlBase":")[^"]+(?=")')  # Look for text sandwiched between the lookbehind and
             # the lookahead, but EXCLUDE the double quotes (i.e. find the first double quotes as the upper limit of the text)
 
             split_query = None
@@ -248,8 +313,36 @@ class CALPADSClient:
             #If you made it this far, something went wrong.
             return False
 
+    def _select_lea(self, lea_code):
+        """Specifies the context of the requests to the provided lea_code.
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+            this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+
+        Returns:
+            None
+        """
+        with self.session as session:
+            session.get(self.host)
+            page_root = etree.fromstring(self.visit_history[-1].text, parser=etree.HTMLParser(encoding='utf8'))
+            orgchange_form = page_root.xpath("//form[contains(@action, 'UserOrgChange')]")[0]
+            try:
+                org_form_val = (orgchange_form
+                                .xpath("//select/option[contains(text(), '{}')]".format(lea_code))[0]
+                                .attrib.get('value'))
+            except IndexError:
+                self.log.info("The provided lea_code, {}, does not appear to exist for you."
+                              .format(lea_code))
+                raise Exception("Unable to switch to the provided LEA Code")
+
+            request_token = orgchange_form.xpath("//input[@name='__RequestVerificationToken']")[0].get('value')
+
+            session.post(urljoin(self.host, orgchange_form.attrib['action']),
+                         data={'selectedItem': org_form_val,
+                               '__RequestVerificationToken': request_token})
+
     def _get_report_link(self, report_code, is_snapshot=False):
-        #TODO: Lowercase report_code either here or in whatever ends up calling it
+        """Fetch and return the URL associated with the report_code"""
         with self.session as session:
             if is_snapshot:
                 session.get('https://www.calpads.org/Report/Snapshot')
@@ -263,12 +356,13 @@ class CALPADSClient:
                 root = etree.fromstring(response.text, parser=etree.HTMLParser(encoding='utf8'))
                 elements = root.xpath("//*[@class='num-wrap-in']")
                 for element in elements:
-                    if report_code == element.text:
+                    if report_code == element.text.lower():
                         return urljoin(self.host, element.xpath('./../../a')[0].attrib['href'])
                 #TODO: Write this exception in an exceptions.py
                 #raise ReportNotFound('{} report code cannot be found on the webpage'.format(report_code))
 
     def _handle_event_hooks(self, r, *args, **kwargs):
+        """This hook is executed with every HTPP request, primarily used to handle instances of OAuth Dance."""
         self.log.debug(("Response STATUS CODE: {}\nChecking hooks for: \n{}\n"
                         .format(r.status_code, r.url)
                         )
@@ -320,5 +414,3 @@ class CALPADSClient:
             self.log.debug("No response hook needed for: {}\n".format(r.url))
             self.visit_history.append(r)
             return r
-
-

@@ -96,7 +96,7 @@ class ClientTest(CALPADSTest):
                                                              dry_run=True),
                               dict)
 
-    def test_download_report(self):
+    def test_download_snapshot_report(self):
         payload = {'AcademicYear': '2019-2020',
                    'LEA': os.getenv('CALPADS_TEST_LEA'),
                    'Status': 'Revised Uncertified',
@@ -104,11 +104,40 @@ class ClientTest(CALPADSTest):
         #TODO: Add subtests for all ODS and all Snapshot reports
         with TemporaryDirectory() as td:
             #Test that function returns True if it is successful
-            self.assertTrue(self.cp_client.download_report(report_code='8.1',
-                                                             file_name=os.path.join(td, 'testing.csv'),
+            self.assertTrue(self.cp_client.download_report(lea_code=os.getenv('CALPADS_TEST_LEA_CODE'),
+                                                           report_code='8.1',
+                                                           file_name=os.path.join(td, 'testing.csv'),
                                                            form_data=payload,
-                                                             is_snapshot=True,
-                                                             dry_run=False))
+                                                           is_snapshot=True,
+                                                           dry_run=False
+                                                           )
+                            )
+            #Test that all of the bytes were written to file
+            #Cautionary Tale here if the content is compressed:
+            #https://stackoverflow.com/a/50825553
+            self.assertTrue(len(self.cp_client.visit_history[-1].content)
+                            ==
+                            os.stat(os.path.join(td, 'testing.csv')).st_size
+                            )
+
+    def test_download_ods_report(self):
+        payload = {'AcademicYear': '2019-2020',
+                   'LEA': os.getenv('CALPADS_TEST_LEA'),
+                   'Status': 'Revised Uncertified',
+                   'AsOfMonth': 'May',
+                   'AsOfDay': '24',
+                   }
+        #TODO: Add subtests for all ODS and all Snapshot reports
+        with TemporaryDirectory() as td:
+            #Test that function returns True if it is successful
+            self.assertTrue(self.cp_client.download_report(lea_code=os.getenv('CALPADS_TEST_LEA_CODE'),
+                                                           report_code='8.1',
+                                                           file_name=os.path.join(td, 'testing.csv'),
+                                                           form_data=payload,
+                                                           is_snapshot=False,
+                                                           dry_run=False
+                                                           )
+                            )
             #Test that all of the bytes were written to file
             #Cautionary Tale here if the content is compressed:
             #https://stackoverflow.com/a/50825553
