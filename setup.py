@@ -8,7 +8,7 @@ with open("LICENSE", "r") as li:
 
 setup(
     name="calpads",
-    version="0.1.0",
+    version="0.2.0",
     author="Yusuph Mkangara",
     author_email="yusuph.mka@outlook.com",
     description="Python Web API wrapper for CDE's CALPADS with a focus on data extraction",
@@ -19,7 +19,7 @@ setup(
     packages=find_packages(include=["calpads"]),
     python_requires=">=3.6", #Might be able to support earlier versions, but would have to see
     install_requires=[
-    "beautifulsoup4>=4.8.0, <5.0.0", #Might not need 4.8.0 exactly, but for now
+    "lxml>=4.4.1, <5.0.0", #Might not need 4.4.1 exactly, but for now
     "requests>=2.22.0, <3.0.0"
     ]
 )
