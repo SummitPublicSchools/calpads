@@ -315,7 +315,7 @@ class CALPADSClient:
             #If you made it this far, something went wrong.
             return False
 
-    def request_extract(self, lea_code, extract_name, form_data, dry_run):
+    def request_extract(self, lea_code, extract_name, form_data, by_date=False, dry_run=False):
         """
         Request an extract with the extract_name from CALPADS.
 
@@ -352,7 +352,7 @@ class CALPADSClient:
         Returns:
             boolean: True if extract request was successful, False if it was not successful.
         """
-        # navigate to extract page
+        extract_name = extract_name.upper()
         with self.session as session:
             self._select_lea(lea_code)
             # Direct URL access for each extract request with a few exceptions for atypical extracts
@@ -361,36 +361,59 @@ class CALPADSClient:
                 session.get('https://www.calpads.org/Extract/SSIDExtract')
             elif extract_name == 'DIRECTCERTIFICATION':
                 session.get('https://www.calpads.org/Extract/DirectCertificationExtract')
+            elif extract_name == 'REJECTEDRECORDS':
+                session.get('https://www.calpads.org/Extract/RejectedRecords')
+            elif extract_name == 'CANDIDATELIST':
+                session.get('https://www.calpads.org/Extract/CandidateList')
+            elif extract_name == 'REPLACEMENTSSID':
+                session.get('https://www.calpads.org/Extract/ReplacementSSID')
+            elif extract_name == 'SPEDDISCREPANCYEXTRACT':
+                session.get('https://www.calpads.org/Extract/SPEDDiscrepancyExtract')
+            elif extract_name == 'DSEAEXTRACT':
+                session.get('https://www.calpads.org/Extract/DSEAExtract')
             else:
                 #TODO: Let's add some more validation layers here. Maybe through a separate extract module like reports or
                 #a config file
-                session.get('https://www.calpads.org/Extract/ODSExtract?RecordType={}'.format(extract_name.upper()))
+                session.get('https://www.calpads.org/Extract/ODSExtract?RecordType={}'.format(extract_name))
             root = etree.fromstring(self.visit_history[-1].text, etree.HTMLParser(encoding='utf8'))
-            default_form = root.xpath('//form[contains(@action, "Extract") and not(contains(@action, "Date"))]')[0]
-            try:
-                bydate_form = root.xpath('//form[contains(@action, "Extract") and contains(@action, "Date")]')[0]
-            except IndexError:
-                self.log.debug("There is no By Date Range request option.")
 
-            form = ExtractsForm(default_form)
+            #In the past, for SPED and SSRV extracts, CALPADS showed SELPA and NonSELPA form options.
+            #They have either removed or only show by permission levels, so we won't add that extra layer, for now.
+            #TODO: CENR needs a little help since it has 3 options, not just 2
+            if by_date:
+                try:
+                    chosen_form = root.xpath('//form[contains(@action, "Extract") and contains(@action, "Date")]')[0]
+                except IndexError:
+                    self.log.info("There is no By Date Range request option. Falling back to the default form option.")
+                    chosen_form = root.xpath('//form[contains(@action, "Extract") and not(contains(@action, "Date"))]')[0]
+            else:
+                chosen_form = root.xpath('//form[contains(@action, "Extract") and not(contains(@action, "Date"))]')[0]
+
+            extracts_form = ExtractsForm(chosen_form)
             if dry_run:
-                return form.get_parsed_form_fields()
+                return return extracts_form.get_parsed_form_fields()
 
-            filled_fields= form.prefilled_fields.copy() #Safe to do shallow copy because list contents are immutable
+            filled_fields = extracts_form.prefilled_fields.copy() #Safe to do shallow copy; list contents are immutable
             filled_fields.extend(form_data + [('ReportingLEA', lea_code)])
+            # Text inputs are not able to submit multiple key values, particularly a problem for Date Range
+            filled_fields = extracts_form._filter_text_input_fields(filled_fields)
+            #self.log.debug('The submitted form data: {}'.format(filled_fields))
 
-            session.post(urljoin(self.host, default_form.attrib['action']),
+            #self.log.debug('Posting extract request to: {}'.format(urljoin(self.host, chosen_form.attrib['action'])))
+            session.post(urljoin(self.host, chosen_form.attrib['action']),
                          data=filled_fields)
             success_text = 'Extract request made successfully.  Please check back later for download.'
             request_response = etree.fromstring(self.visit_history[-1].text, parser=etree.HTMLParser(encoding='utf8'))
             try:
+                #self.log.debug(request_response.xpath('//p')[0].text)
                 success = (success_text == request_response.xpath('//p')[0].text)
             except IndexError:
+                #self.log.debug('Was not able to find a paragraph tag')
                 success = False
 
             return success
 
-    def download_extract(self, lea_code, file_name, timeout=60):
+    def download_extract(self, lea_code, file_name, timeout=60, poll=10):
 
         #TODO: Check also for type and download date, all that good stuff
         with self.session as session:
@@ -404,7 +427,7 @@ class CALPADSClient:
                     extract_request_id = result[0]['ExtractRequestID']
                     break
                 #Take a breather
-                time.sleep(2)
+                time.sleep(poll)
             if extract_request_id:
                 session.get("https://www.calpads.org/Extract/DownloadLink?ExtractRequestID={}".format(extract_request_id))
             else:

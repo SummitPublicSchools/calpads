@@ -1,5 +1,5 @@
 """Extract form handler"""
-
+import logging
 
 class ExtractsForm:
 
@@ -9,6 +9,11 @@ class ExtractsForm:
         self.named_fields = [tag for tag in self.root.xpath('.//*[@name]')]
         self.prefilled_fields = [(field.attrib['name'], field.attrib.get('value'))
                                  for field in self.named_fields]
+        self.log = logging.getLogger(__name__)
+        log_fmt = f'%(levelname)s: %(asctime)s {self.__class__.__name__}.%(funcName)s: %(message)s'
+        stream_hdlr = logging.StreamHandler()
+        stream_hdlr.setFormatter(logging.Formatter(fmt=log_fmt))
+        self.log.addHandler(stream_hdlr)
 
     def get_parsed_form_fields(self):
         all_parsed_options = dict()
@@ -50,6 +55,42 @@ class ExtractsForm:
                            and tag.tag == 'select'
                            and tag.attrib['name'] != 'ReportingLEA']
         return self._scrape_options_to_dict(selects_no_mult, False)
+
+    def _filter_text_input_fields(self, form_data_tuple):
+        all_text_inputs = self.find_text_inputs()
+        all_form_keys = [field[0] for field in form_data_tuple]
+
+        inputs_to_add = []
+
+        for key_idx, key in enumerate(all_form_keys):
+            if key not in all_text_inputs.keys():
+                inputs_to_add.append(form_data_tuple[key_idx])
+
+        for key in all_text_inputs.keys():
+            #self.log.debug('Checking Key {}'.format(key))
+            for key2 in all_form_keys:
+                if key == key2:
+                    #self.log.debug('Key in form input {} found in parser'.format(key2))
+                    if all_form_keys.count(key2) > 1:
+                        #self.log.debug('Key {} has duplicates submitted. Selecting the last one.'.format(key2))
+                        #This math is still trippy to me @_@
+                        #https://stackoverflow.com/a/522401
+                        idx = len(all_form_keys) - all_form_keys[::-1].index(key) - 1
+                        inputs_to_add.append(form_data_tuple[idx])
+                        # self.log.debug('At this idx {}, found {} in original. In keys, it is {}'
+                        #                .format(idx, form_data_tuple[idx], all_form_keys[idx]))
+                        # self.log.debug('Moving on to a new key from {}'.format(key2))
+                        break
+                    else:
+                        # self.log.debug('Key {} does not appear to have duplicates'.format(key2))
+                        idx = all_form_keys.index(key2)
+                        inputs_to_add.append(form_data_tuple[idx])
+                        # self.log.debug('Moving on to a new key from {}'.format(key2))
+                        break
+
+        return inputs_to_add
+
+
 
     def _scrape_options_to_dict(self, selects, allow_multiple=True):
         options_dict = dict()
