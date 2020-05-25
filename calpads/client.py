@@ -2,6 +2,7 @@ import requests
 import logging
 import json
 import re
+import time
 import unicodedata
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl, urljoin
 from collections import deque
@@ -312,6 +313,101 @@ class CALPADSClient:
 
             #If you made it this far, something went wrong.
             return False
+
+    def request_extract(self, lea_code, extract_name, form_data):
+        """
+        Request an extract with the extract_name from CALPADS.
+
+        For Direct Certification Extract, pass in extract_name='DirectCertification'. For SSID Request Extract, pass in 'SSID'.
+        For the others, use their abbreviated acronym, e.g. SENR, SELA, etc.
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+            extract_name (str): generally the four letter acronym of the extract. e.g. SENR, SELA, etc.
+                For Direct Certification Extract, pass in extract_name='DirectCertification'.
+                For SSID Request Extract, pass in 'SSID'.
+                Spelling matters, capitalization does not. Raises ReportNotFound if report name is unrecognized/not supported.
+            by_date_range (bool, optional): some extracts can be requested with a date range parameter. Set to True to use date range.
+                If True, start_date and end_date are required.
+            start_date (str, optional): when by_date_range is set to True, this is used as the start date parameter. Format: MM/DD/YYYY.
+            end_date (str, optional): when by_date_range is set to True, this is used as the end date parameter. Format: MM/DD/YYYY.
+            active_students (bool, optional): When requesting SPRG, True checks off Active Student in the form.
+                When True, extract pulls only student programs with a NULL exit date for the program at the time of the request.
+                Defaults to False.
+            academic_year (str, optional): String in the format YYYY-YYZZ. E.g. 2019-2020. Required only for some extracts.
+            adjusted_enroll (bool, optional): Adjusted cumulative enrollment for CENR extract.
+                When True, pulls students with enrollments dates that fall in the typical school year.
+                When False, it pulls students with enrollments from July to June (7/1/YYYY - 6/30/YYZZ).
+                Defaults to False.
+            active_staff (bool, optional): For SDEM - only extract SDEM records of active staff. Default to True. If False, must provide employment
+                date range.
+            employment_start_date (str, optional): For SDEM - used to filter Staff members from the extract. Format: MM/DD/YYYY.
+            employment_end_date (str, optional): For SDEM - used to filter Staff members from the extract. Format: MM/DD/YYYY.
+            effective_start_date (str, optional): For SDEM, the effective start date of the SDEM record - used to filter Staff members from
+                the extract. Format: MM/DD/YYYY.
+            effective_end_date (str, optional): For SDEM, the effective end date of the SDEM record - used to filter Staff members from
+                the extract. Format: MM/DD/YYYY.
+        Returns:
+            boolean: True if extract request was successful, False if it was not successful.
+        """
+        # navigate to extract page
+        with self.session as session:
+            self._select_lea(lea_code)
+            # Direct URL access for each extract request with a few exceptions for atypical extracts
+            # navigate to extract page
+            if extract_name == 'SSID':
+                session.get('https://www.calpads.org/Extract/SSIDExtract')
+            elif extract_name == 'DIRECTCERTIFICATION':
+                session.get('https://www.calpads.org/Extract/DirectCertificationExtract')
+            else:
+                #TODO: Let's add some more validation layers here. Maybe through a separate extract module like reports or
+                #a config file
+                session.get('https://www.calpads.org/Extract/ODSExtract?RecordType={}'.format(extract_name.upper()))
+            root = etree.fromstring(self.visit_history[-1].text, etree.HTMLParser(encoding='utf8'))
+            default_form = root.xpath('//form[contains(@action, "Extract") and not(contains(@action, "Date"))]')[0]
+            try:
+                bydate_form = root.xpath('//form[contains(@action, "Extract") and contains(@action, "Date")]')[0]
+            except IndexError:
+                self.log.debug("There is no By Date Range request option.")
+
+            # Looks like we need options that one can overwrite (School)
+            # And options that might be missing that need to be filled in with a default value (ReportingLEA)
+            form_fields = [(field.attrib['name'], field.attrib.get('value')) for field in default_form.xpath('.//*[@name]')]
+            form_fields.extend(form_data + [('ReportingLEA', lea_code)])
+
+            session.post(urljoin(self.host, default_form.attrib['action']),
+                         data=form_fields)
+            success_text = 'Extract request made successfully.  Please check back later for download.'
+            request_response = etree.fromstring(self.visit_history[-1].text, parser=etree.HTMLParser(encoding='utf8'))
+            try:
+                success = (success_text == request_response.xpath('//p')[0].text)
+            except IndexError:
+                success = False
+
+            return success
+
+    def download_extract(self, lea_code, file_name, timeout=60):
+
+        #TODO: Check also for type and download date, all that good stuff
+        with self.session as session:
+            time_start = time.time()
+            while True and (time.time() - time_start) < timeout:
+                session.get('https://www.calpads.org/Extract?SelectedLEA={}&format=JSON'.format(lea_code))
+                result = json.loads(self.visit_history[-1].content)['Data']
+                #Currently only pulling the first result to check against, assuming it's the latest
+                if result[0]['ExtractStatus'] == 'Complete':
+                    extract_request_id = result[0]['ExtractRequestID']
+                    break
+                #TODO: Take a breather?
+                time.sleep(2)
+            session.get("https://www.calpads.org/Extract/DownloadLink?ExtractRequestID={}".format(extract_request_id))
+
+            with open(file_name, 'wb') as f:
+                f.write(self.visit_history[-1].content)
+                return True
+
+
 
     def _select_lea(self, lea_code):
         """Specifies the context of the requests to the provided lea_code.
