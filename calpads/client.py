@@ -8,6 +8,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl, urljoin
 from collections import deque
 from lxml import etree
 from .reports_form import ReportsForm, REPORTS_DL_FORMAT
+from .extracts_form import ExtractsForm
 
 
 class CALPADSClient:
@@ -314,7 +315,7 @@ class CALPADSClient:
             #If you made it this far, something went wrong.
             return False
 
-    def request_extract(self, lea_code, extract_name, form_data):
+    def request_extract(self, lea_code, extract_name, form_data, dry_run):
         """
         Request an extract with the extract_name from CALPADS.
 
@@ -371,13 +372,15 @@ class CALPADSClient:
             except IndexError:
                 self.log.debug("There is no By Date Range request option.")
 
-            # Looks like we need options that one can overwrite (School)
-            # And options that might be missing that need to be filled in with a default value (ReportingLEA)
-            form_fields = [(field.attrib['name'], field.attrib.get('value')) for field in default_form.xpath('.//*[@name]')]
-            form_fields.extend(form_data + [('ReportingLEA', lea_code)])
+            form = ExtractsForm(default_form)
+            if dry_run:
+                return form.get_parsed_form_fields()
+
+            filled_fields= form.prefilled_fields.copy() #Safe to do shallow copy because list contents are immutable
+            filled_fields.extend(form_data + [('ReportingLEA', lea_code)])
 
             session.post(urljoin(self.host, default_form.attrib['action']),
-                         data=form_fields)
+                         data=filled_fields)
             success_text = 'Extract request made successfully.  Please check back later for download.'
             request_response = etree.fromstring(self.visit_history[-1].text, parser=etree.HTMLParser(encoding='utf8'))
             try:
@@ -392,16 +395,21 @@ class CALPADSClient:
         #TODO: Check also for type and download date, all that good stuff
         with self.session as session:
             time_start = time.time()
-            while True and (time.time() - time_start) < timeout:
+            extract_request_id = None
+            while (time.time() - time_start) < timeout:
                 session.get('https://www.calpads.org/Extract?SelectedLEA={}&format=JSON'.format(lea_code))
                 result = json.loads(self.visit_history[-1].content)['Data']
                 #Currently only pulling the first result to check against, assuming it's the latest
                 if result[0]['ExtractStatus'] == 'Complete':
                     extract_request_id = result[0]['ExtractRequestID']
                     break
-                #TODO: Take a breather?
+                #Take a breather
                 time.sleep(2)
-            session.get("https://www.calpads.org/Extract/DownloadLink?ExtractRequestID={}".format(extract_request_id))
+            if extract_request_id:
+                session.get("https://www.calpads.org/Extract/DownloadLink?ExtractRequestID={}".format(extract_request_id))
+            else:
+                self.log.info("Download request timed out. The download might have taken too long.")
+                return False
 
             with open(file_name, 'wb') as f:
                 f.write(self.visit_history[-1].content)
