@@ -13,6 +13,7 @@ An experimental and unofficial Python Web API wrapper for California Department 
 * Supports switching between multiple LEAs
 
 # Installation
+* To get much of this speed gain, we depend on `lxml`. They have specific [installation instructions here](https://lxml.de/installation.html).
 * Recommend pip: `pip install git+https://github.com/yo-my-bard/calpads.git@0.3.0`
 
 # Planned Experimentations
