@@ -8,7 +8,7 @@ with open("LICENSE", "r") as li:
 
 setup(
     name="calpads",
-    version="0.2.0",
+    version="0.3.0",
     author="Yusuph Mkangara",
     author_email="yusuph.mka@outlook.com",
     description="Python Web API wrapper for CDE's CALPADS with a focus on data extraction",

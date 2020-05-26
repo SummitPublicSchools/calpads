@@ -2,11 +2,12 @@ import requests
 import logging
 import json
 import re
-import unicodedata
+import time
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl, urljoin
 from collections import deque
 from lxml import etree
 from .reports_form import ReportsForm, REPORTS_DL_FORMAT
+from .extracts_form import ExtractsForm
 
 
 class CALPADSClient:
@@ -31,7 +32,6 @@ class CALPADSClient:
             self.__connection_status = self._login()
         except RecursionError:
             self.log.info("Looks like the provided credentials might be incorrect. Confirm credentials.")
-
 
     def _login(self):
         """Login method which generally doesn't need to be called except when initializing the client."""
@@ -224,7 +224,7 @@ class CALPADSClient:
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/PSTS?format=JSON'))
         return json.loads(response.content)
 
-    def download_report(self, lea_code, report_code, file_name, is_snapshot=False,
+    def download_report(self, lea_code, report_code, file_name=None, is_snapshot=False,
                         download_format='CSV', form_data=None, dry_run=False):
         """Download CALPADS ODS or Snapshot Reports
 
@@ -253,6 +253,8 @@ class CALPADSClient:
             self.log.info('{} is not a supported reports download format. Try: {}'
                           .format(download_format, ' '.join(REPORTS_DL_FORMAT.keys())))
             raise Exception('Bad download format')
+        if not file_name:
+            file_name = 'data'
         with self.session as session:
             self._select_lea(lea_code)
             report_url = self._get_report_link(report_code.lower(), is_snapshot)
@@ -312,6 +314,159 @@ class CALPADSClient:
 
             #If you made it this far, something went wrong.
             return False
+
+    def request_extract(self, lea_code, extract_name, form_data=None, by_date_range=False,
+                        by_as_of_date=False, dry_run=False):
+        """
+        Request an extract with the extract_name from CALPADS.
+
+        For Direct Certification Extract, pass in extract_name='DirectCertification'.
+        For DSEA Extract, pass in extract_name='DSEAExtract'
+        For the others, use their abbreviated acronym, e.g. SENR, SELA, etc.
+
+        When dry_run is true, this returns a dict with suggestions for form_data inputs. The keys are the keys,
+        the values are options for valid values. If the value is str, then any string is allowed. Date parameters
+        will provide a value with formatting instructions (namely, MM/DD/YYYY). Select fields have dict values in
+        the form of: {'FieldName': {'_allows_multiple': True, 'val1': 'internal_val'}. The expected input should
+        look like form_data = [('FieldName', 'internal_val')], that is take the key of dict, and the value of the
+        nested dict. 'val1' is the value dispalyed in the UI. If '_allows_multiple' is False, then only one of those
+        field keys should be sent in the request. If '_allows_multiple' is True, then the key can have multiple values.
+        A common example is schools: [('School', '0000001'), ('School', '0000002')] for NPS and Private schools.
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+            extract_name (str): generally the four letter acronym of the extract. e.g. SENR, SELA, etc.
+                For Direct Certification Extract, pass in extract_name='DirectCertification'.
+                Spelling matters, capitalization does not. Silently fails if report name is unrecognized/not supported.
+            form_data (list of iterables, optional): a list of the (key, value) pairs to send in the POST request body. To know
+                which keys and values are expected, set dry_run=True. Technically optional, but will silently fail if
+                a required key is missing.
+            by_date_range (bool, optional): some extracts can be requested with a date range parameter.
+                Set to True to use date range.
+            by_as_of_date (bool, optional): used only in CENR to fill out the As of Date form. If by_date_range is True,
+                this is ignored.
+            dry_run (bool): when False, it downloads the report. When True, it doesn't download the report and instead
+                returns a dict with the form fields and their expected inputs.
+        Returns:
+            bool: True if extract request was successful, False if it was not successful.
+            dict: when dry_run=True, it returns a dict of the form fields and their expected inputs for report manipulation
+        """
+        extract_name = extract_name.upper()
+        if not form_data:
+            form_data = list()
+        with self.session as session:
+            self._select_lea(lea_code)
+            # Direct URL access for each extract request with a few exceptions for atypical extracts
+            # navigate to extract page
+            if extract_name == 'SSID':
+                #TODO: Search for alternatives to finding job id, or fall back to ducttape-calpads method
+                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
+                #session.get('https://www.calpads.org/Extract/SSIDExtract')
+            elif extract_name == 'DIRECTCERTIFICATION':
+                session.get('https://www.calpads.org/Extract/DirectCertificationExtract')
+            elif extract_name == 'REJECTEDRECORDS':
+                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
+                # session.get('https://www.calpads.org/Extract/RejectedRecords')
+            elif extract_name == 'CANDIDATELIST':
+                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
+                # session.get('https://www.calpads.org/Extract/CandidateList')
+            elif extract_name == 'REPLACEMENTSSID':
+                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
+                # session.get('https://www.calpads.org/Extract/ReplacementSSID')
+            elif extract_name == 'SPEDDISCREPANCYEXTRACT':
+                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
+                # session.get('https://www.calpads.org/Extract/SPEDDiscrepancyExtract')
+            elif extract_name == 'DSEAEXTRACT':
+                session.get('https://www.calpads.org/Extract/DSEAExtract')
+            else:
+                #TODO: Let's add some more validation layers here. Maybe through a separate extract module like reports or
+                #a config file
+                session.get('https://www.calpads.org/Extract/ODSExtract?RecordType={}'.format(extract_name))
+            root = etree.fromstring(self.visit_history[-1].text, etree.HTMLParser(encoding='utf8'))
+
+            #In the past, for SPED and SSRV extracts, CALPADS showed SELPA and NonSELPA form options.
+            #They have either removed or only show by permission levels, so we won't add that extra layer, for now.
+            if by_date_range:
+                try:
+                    if extract_name != 'CENR':
+                        chosen_form = root.xpath('//form[contains(@action, "Extract") and contains(@action, "Date")]')[0]
+                    else:
+                        chosen_form = root.xpath('//form[contains(@action, "Extract") and contains(@action, "DateRange")]')[0]
+                except IndexError:
+                    self.log.info("There is no By Date Range request option. Falling back to the default form option.")
+                    chosen_form = root.xpath('//form[contains(@action, "Extract") and not(contains(@action, "Date"))]')[0]
+            elif extract_name == 'CENR' and by_as_of_date:
+                chosen_form = root.xpath('//form[contains(@action, "Extract") and contains(@action, "AsofDate")]')[0]
+            else:
+                chosen_form = root.xpath('//form[contains(@action, "Extract") and not(contains(@action, "Date"))]')[0]
+
+            extracts_form = ExtractsForm(chosen_form)
+            if dry_run:
+                return extracts_form.get_parsed_form_fields()
+
+            filled_fields = extracts_form.prefilled_fields.copy() #Safe to do shallow copy; list contents are immutable
+            filled_fields.extend(form_data + [('ReportingLEA', lea_code)])
+            # Text inputs are not able to submit multiple key values, particularly a problem for Date Range
+            filled_fields = extracts_form._filter_text_input_fields(filled_fields)
+            #self.log.debug('The submitted form data: {}'.format(filled_fields))
+
+            #self.log.debug('Posting extract request to: {}'.format(urljoin(self.host, chosen_form.attrib['action'])))
+            session.post(urljoin(self.host, chosen_form.attrib['action']),
+                         data=filled_fields)
+            success_text = 'Extract request made successfully.  Please check back later for download.'
+            request_response = etree.fromstring(self.visit_history[-1].text, parser=etree.HTMLParser(encoding='utf8'))
+            try:
+                #self.log.debug(request_response.xpath('//p')[0].text)
+                success = (success_text == request_response.xpath('//p')[0].text)
+            except IndexError:
+                #self.log.debug('Was not able to find a paragraph tag')
+                success = False
+
+            return success
+
+    def download_extract(self, lea_code, file_name, timeout=60, poll=10):
+        """
+        Download the file and give it the provided file_name.
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+            file_name (str): the name of the file to pass to open(file_name, 'wb'). Assumes any subdirectories
+                parent directories referenced in the file name already exist.
+            timeout (int, optional): how long to wait for a completed extract request.
+                Defaults to 60 seconds.
+            poll (float, optional): this is how long to wait between polls to the API to check if the request is
+                complete. This parameter is used in time.sleep(). Defaults to 10 seconds to respect the API, and
+                enforces a minimum of 2 seconds.
+
+        Returns:
+            bool: True for a successful download of report, else False.
+        """
+        if poll < 2:
+            poll = 2
+        #TODO: Check also for type and download date, all that good stuff
+        with self.session as session:
+            time_start = time.time()
+            extract_request_id = None
+            while (time.time() - time_start) < timeout:
+                session.get('https://www.calpads.org/Extract?SelectedLEA={}&format=JSON'.format(lea_code))
+                result = json.loads(self.visit_history[-1].content)['Data']
+                #Currently only pulling the first result to check against, assuming it's the latest
+                if result[0]['ExtractStatus'] == 'Complete':
+                    extract_request_id = result[0]['ExtractRequestID']
+                    break
+                #Take a breather
+                time.sleep(poll)
+            if extract_request_id:
+                session.get("https://www.calpads.org/Extract/DownloadLink?ExtractRequestID={}".format(extract_request_id))
+            else:
+                self.log.info("Download request timed out. The download might have taken too long.")
+                return False
+
+            with open(file_name, 'wb') as f:
+                f.write(self.visit_history[-1].content)
+                return True
 
     def _select_lea(self, lea_code):
         """Specifies the context of the requests to the provided lea_code.
