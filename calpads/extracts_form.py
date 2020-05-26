@@ -4,7 +4,7 @@ import logging
 class ExtractsForm:
 
     def __init__(self, form_root):
-        """Takes in the lxml.etree.fromstring() root of the form"""
+        """Takes in the root form node returned by lxml.etree.fromstring()"""
         self.root = form_root
         self.named_fields = [tag for tag in self.root.xpath('.//*[@name]')]
         self.prefilled_fields = [(field.attrib['name'], field.attrib.get('value'))
@@ -90,8 +90,6 @@ class ExtractsForm:
 
         return inputs_to_add
 
-
-
     def _scrape_options_to_dict(self, selects, allow_multiple=True):
         options_dict = dict()
         for tag in selects:
@@ -100,5 +98,3 @@ class ExtractsForm:
             options_dict[tag.attrib['name']] = dict([('_allows_multiple', allow_multiple)] + options)
 
         return options_dict
-
-

@@ -34,17 +34,17 @@ class CALPADSTest(unittest.TestCase):
 class ClientTest(CALPADSTest):
 
     def test_successful_login(self):
-        self.assertTrue(self.cp_client.login())
+        self.assertTrue(self.cp_client._login())
 
     def test_successful_connection(self):
-        self.cp_client.login()
+        self.cp_client._login()
         self.assertTrue(self.cp_client.is_connected)
 
     @unittest.skip("This isn't quite ready for a unittest. Might need to remove the self.login call at instantiation")
     def test_invalid_login(self):
         self.cp_client.username = 'BAD USER'
         with self.assertRaises(RecursionError):
-            self.cp_client.login()
+            self.cp_client._login()
 
     def test_get_leas(self):
         #Wouldn't be shocked if this fails if the specification changes on CALPADS' end
@@ -90,7 +90,8 @@ class ClientTest(CALPADSTest):
         self.assertIsInstance(self.cp_client.get_psts_history(1), dict)
 
     def test_download_report_dry_run(self):
-        self.assertIsInstance(self.cp_client.download_report(report_code='8.1',
+        self.assertIsInstance(self.cp_client.download_report(lea_code=os.getenv('CALPADS_TEST_LEA_CODE'),
+                                                            report_code='8.1',
                                                              file_name='testing.csv',
                                                              is_snapshot=True,
                                                              dry_run=True),
@@ -146,3 +147,28 @@ class ClientTest(CALPADSTest):
                             os.stat(os.path.join(td, 'testing.csv')).st_size
                             )
 
+    def test_request_extract_dry_run(self):
+        self.assertIsInstance(self.cp_client.request_extract(lea_code=os.getenv('CALPADS_TEST_LEA_CODE'),
+                                                             extract_name='SENR',
+                                                             dry_run=True),
+                              dict)
+
+    def test_request_extract(self):
+        payload = [('School', '0000001'), ('School', '0000002'),
+                   ('EnrollmentStartDate', '02/02/2020'),
+                   ('EnrollmentEndDate', '02/03/2020'),
+                   ]
+        self.assertTrue(self.cp_client.request_extract(lea_code=os.getenv('CALPADS_TEST_LEA_CODE'),
+                                                       extract_name='SENR',
+                                                       form_data=payload,
+                                                       by_date_range=True
+                                                       ))
+    def test_download_extract(self):
+        with TemporaryDirectory() as td:
+            self.assertTrue(self.cp_client.download_extract(lea_code=os.getenv('CALPADS_TEST_LEA_CODE'),
+                                                            file_name=os.path.join(td, 'testing.txt')))
+
+            self.assertTrue(len(self.cp_client.visit_history[-1].content)
+                            ==
+                            os.stat(os.path.join(td, 'testing.txt')).st_size
+                            )
