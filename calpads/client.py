@@ -224,6 +224,20 @@ class CALPADSClient:
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/PSTS?format=JSON'))
         return json.loads(response.content)
 
+    def get_requested_extracts(self, lea_code):
+        """Returns a JSON object with the Postsecondary Transition Status (PSTS) history for the provided SSID
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+
+        Returns:
+            a JSON object with a Data key
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Extract?SelectedLEA={lea_code}&format=JSON'))
+        return json.loads(response.content)
+
     def download_report(self, lea_code, report_code, file_name=None, is_snapshot=False,
                         download_format='CSV', form_data=None, dry_run=False):
         """Download CALPADS ODS or Snapshot Reports
@@ -426,7 +440,7 @@ class CALPADSClient:
 
             return success
 
-    def download_extract(self, lea_code, file_name, timeout=60, poll=10):
+    def download_extract(self, lea_code, file_name=None, timeout=60, poll=10):
         """
         Download the file and give it the provided file_name.
 
@@ -439,21 +453,22 @@ class CALPADSClient:
                 Defaults to 60 seconds.
             poll (float, optional): this is how long to wait between polls to the API to check if the request is
                 complete. This parameter is used in time.sleep(). Defaults to 10 seconds to respect the API, and
-                enforces a minimum of 2 seconds.
+                enforces a minimum of 1 second.
 
         Returns:
             bool: True for a successful download of report, else False.
         """
-        if poll < 2:
-            poll = 2
+        if poll < 1:
+            poll = 1
+        if not file_name:
+            file_name = 'data'
         #TODO: Check also for type and download date, all that good stuff
         with self.session as session:
             self._select_lea(lea_code)
             time_start = time.time()
             extract_request_id = None
             while (time.time() - time_start) < timeout:
-                session.get('https://www.calpads.org/Extract?SelectedLEA={}&format=JSON'.format(lea_code))
-                result = json.loads(self.visit_history[-1].content)['Data']
+                result = self.get_requested_extracts(lea_code).get('Data')
                 # self.log.debug(result)
                 #Currently only pulling the first result to check against, assuming it's the latest
                 if result[0]['ExtractStatus'] == 'Complete':
@@ -462,14 +477,17 @@ class CALPADSClient:
                 #Take a breather
                 time.sleep(poll)
             if extract_request_id:
-                session.get("https://www.calpads.org/Extract/DownloadLink?ExtractRequestID={}".format(extract_request_id))
+                with open(file_name, 'wb') as f:
+                    f.write(self._get_extract_bytes(extract_request_id))
+                    return True
             else:
                 self.log.info("Download request timed out. The download might have taken too long.")
                 return False
 
-            with open(file_name, 'wb') as f:
-                f.write(self.visit_history[-1].content)
-                return True
+    def _get_extract_bytes(self, extract_request_id):
+        """Get the extract bytes by extract_request_id. Returns bytes."""
+        self.session.get(urljoin(self.host, f'/Extract/DownloadLink?ExtractRequestID={extract_request_id}'))
+        return self.visit_history[-1].content
 
     def _select_lea(self, lea_code):
         """Specifies the context of the requests to the provided lea_code.
