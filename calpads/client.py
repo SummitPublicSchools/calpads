@@ -280,6 +280,7 @@ class CALPADSClient:
             submitted_form_data = {k: v for k, v in formatted_form_data.items() if v != ''}
 
             #self.log.debug('The form data about to be submitted: \n{}\n'.format(submitted_form_data))
+            #self.log.debug('These are the data keys about to be submitted: \n{}\n'.format(submitted_form_data.keys()))
             #TODO: Document that it seems like at a minimum all "select" fields need to have values provided for
             #Alternatively, provide default values
             session.post(self.visit_history[-1].url, data=submitted_form_data)
@@ -447,11 +448,13 @@ class CALPADSClient:
             poll = 2
         #TODO: Check also for type and download date, all that good stuff
         with self.session as session:
+            self._select_lea(lea_code)
             time_start = time.time()
             extract_request_id = None
             while (time.time() - time_start) < timeout:
                 session.get('https://www.calpads.org/Extract?SelectedLEA={}&format=JSON'.format(lea_code))
                 result = json.loads(self.visit_history[-1].content)['Data']
+                # self.log.debug(result)
                 #Currently only pulling the first result to check against, assuming it's the latest
                 if result[0]['ExtractStatus'] == 'Complete':
                     extract_request_id = result[0]['ExtractRequestID']
