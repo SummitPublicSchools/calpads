@@ -29,11 +29,14 @@ class ExtractsForm:
                       if tag.tag == 'input'
                       and tag.attrib.get('type') == 'text'
                       and tag.attrib['name'] != 'RecordType']
-        non_date_options = [(tag.attrib['name'], str)
+        non_date_options = [(tag.attrib['name'],
+                             {'Required': 'data-val-required' in tag.attrib,
+                              'ValidValues': str})
                             for tag in text_inputs
                             if 'date' not in tag.attrib['name'].lower()]
         date_options = [(tag.attrib['name'],
-                             'string with valid date formatting, MM/DD/YYYY e.g. 02/02/2020')
+                         {'Required': 'data-val-required' in tag.attrib,
+                          'ValidValues': 'string with valid date formatting, MM/DD/YYYY e.g. 02/02/2020'})
                             for tag in text_inputs
                             if 'date' in tag.attrib['name'].lower()]
         return dict(non_date_options + date_options)
@@ -42,7 +45,10 @@ class ExtractsForm:
         checkboxes = [tag for tag in self.named_fields
                       if tag.tag == 'input'
                       and tag.attrib.get('type') == 'checkbox']
-        options = [(tag.attrib['name'], bool) for tag in checkboxes]
+        options = [(tag.attrib['name'],
+                    {'Required': 'data-val-required' in tag.attrib,
+                     'ValidValues': bool})
+                   for tag in checkboxes]
         return dict(options)
 
     def find_selects_allow_multiple(self):
@@ -95,6 +101,7 @@ class ExtractsForm:
         for tag in selects:
             options = [(option.text, option.attrib.get('value'))
                        for option in tag.xpath('.//option')]
-            options_dict[tag.attrib['name']] = dict([('_allows_multiple', allow_multiple)] + options)
+            options_dict[tag.attrib['name']] = {'Required': 'data-val-required' in tag.attrib,
+                                                'ValidValues': dict([('_allows_multiple', allow_multiple)] + options)}
 
         return options_dict
