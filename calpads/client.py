@@ -68,6 +68,51 @@ class CALPADSClient:
         response = self.session.get(urljoin(self.host, f"/SchoolListingAll?lea={lea_code}&format=JSON"))
         return json.loads(response.content)
 
+    def get_homepage_important_messages(self):
+        """Returns the CALPADS' Homepage Important Messages section in JSON
+        Returns:
+            a dict with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, '/HomepageImportantMessages?format=JSON'))
+        return json.loads(response.content)
+
+    def get_homepage_anomaly_status(self):
+        """Returns the CALPADS' Homepage Anomaly Status section in JSON format
+        Returns:
+            a dict with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, '/HomepageAnomalyStatus?format=JSON'))
+        return json.loads(response.content)
+
+    def get_homepage_certification_status(self):
+        """Returns the CALPADS' Homepage Certification Status section in JSON format
+        Returns:
+            a dict with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, '/HomepageCertificationStatus?format=JSON'))
+        return json.loads(response.content)
+
+    def get_homepage_submission_status(self):
+        """Returns the CALPADS' Homepage Submission Status section in JSON format
+        Returns:
+            a dict with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, '/HomepageSubmissions?format=JSON'))
+        return json.loads(response.content)
+
+    def get_homepage_extract_status(self):
+        """Returns the CALPADS' Homepage Extract Status section in JSON format
+        Returns:
+            a dict with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, '/HomepageNotifications?format=JSON'))
+        return json.loads(response.content)
+
     def get_enrollment_history(self, ssid):
         """Returns a JSON object with the Enrollment history for the provided SSID
 
@@ -196,6 +241,19 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Offense?format=JSON'))
+        return json.loads(response.content)
+
+    def get_assessment_history(self, ssid):
+        """Returns a JSON object with the Student Offense (SOFF) history for the provided SSID
+
+        Args:
+            ssid (int, str): the 10 digit CALPADS Statewide Student Identifier
+
+        Returns:
+            a JSON object with a Data key and a total record count key (the name of this key can vary).
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Assessment?format=JSON'))
         return json.loads(response.content)
 
     def get_sped_history(self, ssid):
