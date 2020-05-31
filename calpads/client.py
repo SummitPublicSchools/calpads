@@ -55,6 +55,19 @@ class CALPADSClient:
         response = self.session.get(urljoin(self.host, 'Leas?format=JSON'))
         return json.loads(response.content)
 
+    def get_all_schools(self, lea_code):
+        """Returns the list of schools for the provided lea_code
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+
+        Returns:
+            list of School dictionaries with the keys Disabled, Group, Selected, Text, Value
+        """
+        response = self.session.get(urljoin(self.host, f"/SchoolListingAll?lea={lea_code}&format=JSON"))
+        return json.loads(response.content)
+
     def get_enrollment_history(self, ssid):
         """Returns a JSON object with the Enrollment history for the provided SSID
 
