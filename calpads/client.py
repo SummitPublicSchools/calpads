@@ -446,7 +446,7 @@ class CALPADSClient:
             # Direct URL access for each extract request with a few exceptions for atypical extracts
             # navigate to extract page
             if extract_name == 'SSID':
-                #TODO: Search for alternatives to finding job id, or fall back to ducttape-calpads method
+                #TODO: Use get_homepage_submission_status and implement the ones needing Job IDs
                 raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
                 #session.get('https://www.calpads.org/Extract/SSIDExtract')
             elif extract_name == 'DIRECTCERTIFICATION':
