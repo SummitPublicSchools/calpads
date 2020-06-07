@@ -8,6 +8,7 @@ from collections import deque
 from lxml import etree
 from .reports_form import ReportsForm, REPORTS_DL_FORMAT
 from .extracts_form import ExtractsForm
+from .files_upload_form import FilesUploadForm
 
 
 class CALPADSClient:
@@ -553,6 +554,33 @@ class CALPADSClient:
                     return True
             else:
                 self.log.info("Download request timed out. The download might have taken too long.")
+                return False
+
+    def upload_file(self, lea_code, file_path=None, form_data=None, dry_run=False):
+        if not dry_run:
+            assert file_path and form_data, "File Path and Form Data are required inputs."
+        with self.session as session:
+            self._select_lea(lea_code)
+            session.get("https://www.calpads.org/FileSubmission/FileUpload")
+            root = etree.fromstring(self.visit_history[-1].text,
+                                    etree.HTMLParser(encoding='utf8'))
+            root_form = root.xpath("//div[@id='fileUpload']//form")[0]
+            upload_form = FilesUploadForm(root_form)
+            if dry_run:
+                return upload_form.get_parsed_form_fields()
+            prefilled_form = upload_form.prefilled_fields.copy()
+            prefilled_form.extend(form_data)
+            prefilled_dict = dict(prefilled_form)
+            cleaned_filled_form = {k: v for k,v in prefilled_dict.items() if v != '' and v is not None}
+            file_input = {'FilesUploaded[0].FileName': open(file_path, 'rb')}
+            session.post(urljoin(self.visit_history[-1].url, root_form.attrib['action']),
+                         files=file_input,
+                         data=cleaned_filled_form)
+            response = etree.fromstring(self.visit_history[-1].text,
+                                        etree.HTMLParser(encoding='utf8'))
+            if response.xpath('//*[contains(@class, "alert alert-success")]'):
+                return True
+            else:
                 return False
 
     def _get_extract_bytes(self, extract_request_id):
