@@ -583,6 +583,52 @@ class CALPADSClient:
             else:
                 return False
 
+    def post_file(self, lea_code, ignore_rejections=False, timeout=180, poll=30):
+        if poll < 10:
+            poll = 10
+        with self.session as session:
+            self._select_lea(lea_code)
+            start_time = time.time()
+            while (time.time()-start_time) < timeout:
+                #TODO: Need to check that this references the correct data and not stale data
+                #Maybe 'Ready for Review' ensures the date is never stale?
+                get_job_status = self.get_homepage_submission_status().get('Data')[-1]
+                if get_job_status['SubmissionStatus'] == 'Ready for Review':
+                    if get_job_status['Rejected'] == '0':
+                        #safe to post
+                        session.get(f"https://www.calpads.org/FileSubmission/Detail/{get_job_status['JobID']}")
+                        if self._post_file_post_action().xpath('//*[contains(@class, "alert alert-success")]'):
+                            return True
+                        else:
+                            return False
+                    elif get_job_status['Rejected'] != '0' and ignore_rejections:
+                        #safe-ish to post
+                        self.log.info("There were rejections, but ignoring those rejections.")
+                        session.get(f"https://www.calpads.org/FileSubmission/Detail/{get_job_status['JobID']}")
+                        if self._post_file_post_action().xpath('//*[contains(@class, "alert alert-success")]'):
+                            return True
+                        else:
+                            return False
+                    elif get_job_status['Rejected'] != '0' and not ignore_rejections:
+                        self.log.info("Unable to post the latest job because some records were rejected")
+                        return False
+                else:
+                    time.sleep(poll)
+            self.log.info("Unable to post the latest job, timed out.")
+            return False
+
+    def _post_file_post_action(self):
+        root = etree.fromstring(self.visit_history[-1].text,
+                                etree.HTMLParser(encoding='utf8'))
+        form_root = root.xpath('//form[@action="/FileSubmission/Post"]')[0]
+        #TODO: Test beyond just SENR file
+        inputs = FilesUploadForm(form_root).prefilled_fields + [('command', 'Post All')]
+        input_dict = dict(inputs)
+        self.session.post(urljoin(self.host, '/FileSubmission/Post'),
+                       data=input_dict)
+        response = etree.fromstring(self.visit_history[-1].text,
+                                    etree.HTMLParser(encoding='utf8'))
+        return response
     def _get_extract_bytes(self, extract_request_id):
         """Get the extract bytes by extract_request_id. Returns bytes."""
         self.session.get(urljoin(self.host, f'/Extract/DownloadLink?ExtractRequestID={extract_request_id}'))
