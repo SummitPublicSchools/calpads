@@ -476,22 +476,17 @@ class CALPADSClient:
             # Direct URL access for each extract request with a few exceptions for atypical extracts
             # navigate to extract page
             if extract_name == 'SSID':
-                #TODO: Use get_homepage_submission_status and implement the ones needing Job IDs
-                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
-                #session.get('https://www.calpads.org/Extract/SSIDExtract')
+                session.get('https://www.calpads.org/Extract/SSIDExtract')
             elif extract_name == 'DIRECTCERTIFICATION':
                 session.get('https://www.calpads.org/Extract/DirectCertificationExtract')
             elif extract_name == 'REJECTEDRECORDS':
                 session.get('https://www.calpads.org/Extract/RejectedRecords')
             elif extract_name == 'CANDIDATELIST':
-                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
-                # session.get('https://www.calpads.org/Extract/CandidateList')
+                session.get('https://www.calpads.org/Extract/CandidateList')
             elif extract_name == 'REPLACEMENTSSID':
-                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
-                # session.get('https://www.calpads.org/Extract/ReplacementSSID')
+                session.get('https://www.calpads.org/Extract/ReplacementSSID')
             elif extract_name == 'SPEDDISCREPANCYEXTRACT':
-                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
-                # session.get('https://www.calpads.org/Extract/SPEDDiscrepancyExtract')
+                session.get('https://www.calpads.org/Extract/SPEDDiscrepancyExtract')
             elif extract_name == 'DSEAEXTRACT':
                 session.get('https://www.calpads.org/Extract/DSEAExtract')
             else:
@@ -525,7 +520,8 @@ class CALPADSClient:
             # Text inputs are not able to submit multiple key values, particularly a problem for Date Range
             filled_fields = extracts_form._filter_text_input_fields(filled_fields)
             #self.log.debug('The submitted form data: {}'.format(filled_fields))
-            if extract_name == 'REJECTEDRECORDS': #TODO: See which other JobID extract might need this logic
+            if extract_name in ['REJECTEDRECORDS', 'CANDIDATELIST',
+                                'SPEDDISCREPANCYEXTRACT', 'SSID']:
                 check_submitter = [field for field in filled_fields if field[0] == 'Submitter' and field[1] is not None]
                 if not check_submitter:
                     #If no submitter field is provided, default to the current user
