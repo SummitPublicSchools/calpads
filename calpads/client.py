@@ -328,17 +328,53 @@ class CALPADSClient:
         return json.loads(response.content)
 
     def get_requested_extracts(self, lea_code):
-        """Returns a JSON object with the Postsecondary Transition Status (PSTS) history for the provided SSID
+        """Returns a dictionary object with the a list of extracts at the provided lea_code
 
         Args:
             lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
                 this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
 
         Returns:
-            a JSON object with a Data key
+            a JSON object with a Data key and a total record count key (the name of this key can vary)
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Extract?SelectedLEA={lea_code}&format=JSON'))
+        return json.loads(response.content)
+
+    def get_staff_demographics_history(self, seid):
+        """Returns any existing staff demographics history for the provided SEID
+        Args:
+            seid(int, str): the 10 digit CALPADS Statewide Education Identifier
+
+        Returns:
+            a JSON object with a Data key and a total record count key (the name of this key can vary)
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Staff/{seid}/StaffDemographics?ssid={seid}&format=JSON'))
+        return json.loads(response.content)
+
+    def get_staff_assignments_history(self, seid):
+        """Returns any existing staff assignments history for the provided SEID
+        Args:
+            seid(int, str): the 10 digit CALPADS Statewide Education Identifier
+
+        Returns:
+            a JSON object with a Data key and a total record count key (the name of this key can vary)
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Staff/{seid}/StaffAssignments?ssid={seid}&format=JSON'))
+        return json.loads(response.content)
+
+    def get_staff_courses_history(self, seid):
+        """Returns any existing staff courses history for the provided SEID
+        Args:
+            seid(int, str): the 10 digit CALPADS Statewide Education Identifier
+
+        Returns:
+            a JSON object with a Data key and a total record count key (the name of this key can vary)
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Staff/{seid}/StaffCourses?ssid={seid}&format=JSON'))
         return json.loads(response.content)
 
     def download_report(self, lea_code, report_code, file_name=None, is_snapshot=False,
