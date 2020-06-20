@@ -69,6 +69,37 @@ class CALPADSClient:
         response = self.session.get(urljoin(self.host, f"/SchoolListingAll?lea={lea_code}&format=JSON"))
         return json.loads(response.content)
 
+    def get_submitter_names(self, lea_code):
+        """Returns the list of users who might have ever submitted data for the provided lea_code
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+
+        Returns:
+            list of users dictionaries with the keys Disabled, Group, Selected, Text, Value
+        """
+        response = self.session.get(urljoin(self.host, f"/GetSubmitterNames?leaCdsCode={lea_code}&format=JSON"))
+        return json.loads(response.content)
+
+    def get_user_orgs(self, lea_code, email):
+        """Returns a user's organization and their different roles. Can be used to reliably fetch UserOrgId.
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+            email (str): an email of the user to lookup
+
+        Returns:
+            a dictionary with a Data key which lists the user's available organizations
+        """
+        self._select_lea(lea_code)
+        response = self.session.get(urljoin(self.host, f"/GetUserOrgs/{email}?format=JSON"))
+        if response.status_code == 200:
+            return json.loads(response.content)
+        else:
+            return json.loads('{"Data": [],"Total Count": 0}')
+
     def get_homepage_important_messages(self):
         """Returns the CALPADS' Homepage Important Messages section in JSON
         Returns:
@@ -367,8 +398,6 @@ class CALPADSClient:
 
             #self.log.debug('The form data about to be submitted: \n{}\n'.format(submitted_form_data))
             #self.log.debug('These are the data keys about to be submitted: \n{}\n'.format(submitted_form_data.keys()))
-            #TODO: Document that it seems like at a minimum all "select" fields need to have values provided for
-            #Alternatively, provide default values
             session.post(self.visit_history[-1].url, data=submitted_form_data)
 
             # Regex for grabbing the base, direct download URL for the report
@@ -453,8 +482,7 @@ class CALPADSClient:
             elif extract_name == 'DIRECTCERTIFICATION':
                 session.get('https://www.calpads.org/Extract/DirectCertificationExtract')
             elif extract_name == 'REJECTEDRECORDS':
-                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
-                # session.get('https://www.calpads.org/Extract/RejectedRecords')
+                session.get('https://www.calpads.org/Extract/RejectedRecords')
             elif extract_name == 'CANDIDATELIST':
                 raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
                 # session.get('https://www.calpads.org/Extract/CandidateList')
@@ -497,6 +525,15 @@ class CALPADSClient:
             # Text inputs are not able to submit multiple key values, particularly a problem for Date Range
             filled_fields = extracts_form._filter_text_input_fields(filled_fields)
             #self.log.debug('The submitted form data: {}'.format(filled_fields))
+            if extract_name == 'REJECTEDRECORDS': #TODO: See which other JobID extract might need this logic
+                check_submitter = [field for field in filled_fields if field[0] == 'Submitter' and field[1] is not None]
+                if not check_submitter:
+                    #If no submitter field is provided, default to the current user
+                    filled_fields.extend([('Submitter', self._get_submitter_id(lea_code, self.username))])
+                check_jobid = [field for field in filled_fields if field[0] == 'JobID' and field[1] is not None]
+                if not check_jobid:
+                    #If no jobid is provided, default to the latest job's job id
+                    filled_fields.extend([('JobID', self.get_homepage_submission_status().get('Data')[-1]['JobID'])])
 
             #self.log.debug('Posting extract request to: {}'.format(urljoin(self.host, chosen_form.attrib['action'])))
             session.post(urljoin(self.host, chosen_form.attrib['action']),
@@ -512,7 +549,7 @@ class CALPADSClient:
 
             return success
 
-    def download_extract(self, lea_code, file_name=None, timeout=60, poll=10):
+    def download_extract(self, lea_code, file_name=None, timeout=60, poll=10, return_bytes=False):
         """
         Download the file and give it the provided file_name.
 
@@ -526,9 +563,12 @@ class CALPADSClient:
             poll (float, optional): this is how long to wait between polls to the API to check if the request is
                 complete. This parameter is used in time.sleep(). Defaults to 10 seconds to respect the API, and
                 enforces a minimum of 1 second.
+            return_bytes (bool, optional): instead of writing to file and returning True,
+                this will return bytes if a download would have been successful.
 
         Returns:
             bool: True for a successful download of report, else False.
+            bytes: Bytes of a successful download of the report.
         """
         if poll < 1:
             poll = 1
@@ -545,13 +585,16 @@ class CALPADSClient:
                 #Currently only pulling the first result to check against, assuming it's the latest
                 if result[0]['ExtractStatus'] == 'Complete':
                     extract_request_id = result[0]['ExtractRequestID']
+                    self.log.info("Found an extract request ID")
                     break
                 #Take a breather
                 time.sleep(poll)
-            if extract_request_id:
+            if extract_request_id and not return_bytes:
                 with open(file_name, 'wb') as f:
                     f.write(self._get_extract_bytes(extract_request_id))
                     return True
+            elif extract_request_id and return_bytes:
+                return self._get_extract_bytes(extract_request_id)
             else:
                 self.log.info("Download request timed out. The download might have taken too long.")
                 return False
@@ -583,9 +626,11 @@ class CALPADSClient:
             else:
                 return False
 
-    def post_file(self, lea_code, ignore_rejections=False, timeout=180, poll=30):
+    def post_file(self, lea_code, ignore_rejections=False, get_errors=False,
+                  submitter_email=None, timeout=180, poll=30):
         if poll < 10:
             poll = 10
+        errors = b''
         with self.session as session:
             self._select_lea(lea_code)
             start_time = time.time()
@@ -598,30 +643,72 @@ class CALPADSClient:
                         #safe to post
                         session.get(f"https://www.calpads.org/FileSubmission/Detail/{get_job_status['JobID']}")
                         if self._post_file_post_action().xpath('//*[contains(@class, "alert alert-success")]'):
+                            self.log.info("Successfully posted the file.")
                             return True
                         else:
+                            self.log.info("Attempted and failed to post the file.")
                             return False
                     elif get_job_status['Rejected'] != '0' and ignore_rejections:
                         #safe-ish to post
                         self.log.info("There were rejections, but ignoring those rejections.")
+                        if get_errors:
+                            errors = self._get_file_submission_rejections(lea_code,
+                                                                          get_job_status['FileTypeCode']+'ERR',
+                                                                          submitter_email, get_job_status['JobID'],
+                                                                          timeout, poll)
                         session.get(f"https://www.calpads.org/FileSubmission/Detail/{get_job_status['JobID']}")
                         if self._post_file_post_action().xpath('//*[contains(@class, "alert alert-success")]'):
-                            return True
+                            self.log.info("Successfully posted the file.")
+                            return True, errors
                         else:
-                            return False
+                            self.log.info("Attempted and failed to post the file.")
+                            return False, errors
                     elif get_job_status['Rejected'] != '0' and not ignore_rejections:
+                        if get_errors:
+                            errors = self._get_file_submission_rejections(lea_code,
+                                                                          get_job_status['FileTypeCode']+'ERR',
+                                                                          submitter_email, get_job_status['JobID'],
+                                                                          timeout, poll)
                         self.log.info("Unable to post the latest job because some records were rejected")
-                        return False
+                        return False, errors
                 else:
                     time.sleep(poll)
             self.log.info("Unable to post the latest job, timed out.")
             return False
 
+    def _get_file_submission_rejections(self, lea_code, record_type, submitter_email,
+                                        job_id, timeout, poll):
+        """Helper for getting the latest file submission's rejected records"""
+        self.log.info("Attempting to fetch the latest submission's rejected records.")
+        if submitter_email:
+            #If an email is not None, try to get the submitter ID
+            submitter_id = self._get_submitter_id(lea_code, submitter_email)
+        else:
+            submitter_id = None
+        submitted_fields = [('LEA', lea_code), ('RecordType', record_type),
+                            ('JobID', job_id), ('Submitter', submitter_id),
+                            ('School', 'All')]
+        success = self.request_extract(lea_code, 'REJECTEDRECORDS', submitted_fields)
+        if success:
+            self.log.info("Successfully requested the rejected records. Attempting download.")
+            return self.download_extract(lea_code, timeout=timeout, poll=poll, return_bytes=True) or b'Failed dowloading extract errors'
+        else:
+            self.log.info("Failed to request the rejected records.")
+            return b'Failed requesting extract errors'
+
+    def _get_submitter_id(self, lea_code, submitter_email):
+        """Tries to return a submitter ID. If it fails, returns the email."""
+        submitter_names = self.get_submitter_names(lea_code)
+        try:
+            return [submitter['Value'] for submitter in submitter_names
+                    if submitter['Text'] == submitter_email][0]
+        except IndexError:
+            return submitter_email
+
     def _post_file_post_action(self):
         root = etree.fromstring(self.visit_history[-1].text,
                                 etree.HTMLParser(encoding='utf8'))
         form_root = root.xpath('//form[@action="/FileSubmission/Post"]')[0]
-        #TODO: Test beyond just SENR file
         inputs = FilesUploadForm(form_root).prefilled_fields + [('command', 'Post All')]
         input_dict = dict(inputs)
         self.session.post(urljoin(self.host, '/FileSubmission/Post'),
