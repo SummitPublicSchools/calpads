@@ -8,14 +8,14 @@ with open("LICENSE", "r") as li:
 
 setup(
     name="calpads",
-    version="0.4.0",
+    version="0.5.0",
     author="Yusuph Mkangara",
     author_email="yusuph.mka@outlook.com",
     description="Python Web API wrapper for CDE's CALPADS with a focus on data extraction",
     long_description=long_description,
     long_description_content_type="text/markdown",
     license=lic,
-    url="https://github.com/yo-my-bard/calpads",
+    url="https://github.com/SummitPublicSchools/calpads",
     packages=find_packages(include=["calpads"]),
     python_requires=">=3.6", #Might be able to support earlier versions, but would have to see
     install_requires=[
