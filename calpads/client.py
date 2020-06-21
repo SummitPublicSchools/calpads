@@ -5,9 +5,11 @@ import re
 import time
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl, urljoin
 from collections import deque
+from json import JSONDecodeError
 from lxml import etree
 from .reports_form import ReportsForm, REPORTS_DL_FORMAT
 from .extracts_form import ExtractsForm
+from .files_upload_form import FilesUploadForm
 
 
 class CALPADSClient:
@@ -53,7 +55,7 @@ class CALPADSClient:
             list of LEA dictionaries with the keys Disabled, Group, Selected, Text, Value
         """
         response = self.session.get(urljoin(self.host, 'Leas?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_all_schools(self, lea_code):
         """Returns the list of schools for the provided lea_code
@@ -66,7 +68,38 @@ class CALPADSClient:
             list of School dictionaries with the keys Disabled, Group, Selected, Text, Value
         """
         response = self.session.get(urljoin(self.host, f"/SchoolListingAll?lea={lea_code}&format=JSON"))
-        return json.loads(response.content)
+        return safe_json_load(response)
+
+    def get_submitter_names(self, lea_code):
+        """Returns the list of users who might have ever submitted data for the provided lea_code
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+
+        Returns:
+            list of users dictionaries with the keys Disabled, Group, Selected, Text, Value
+        """
+        response = self.session.get(urljoin(self.host, f"/GetSubmitterNames?leaCdsCode={lea_code}&format=JSON"))
+        return safe_json_load(response)
+
+    def get_user_orgs(self, lea_code, email):
+        """Returns a user's organization and their different roles. Can be used to reliably fetch UserOrgId.
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+            email (str): an email of the user to lookup
+
+        Returns:
+            a dictionary with a Data key which lists the user's available organizations
+        """
+        self._select_lea(lea_code)
+        response = self.session.get(urljoin(self.host, f"/GetUserOrgs/{email}?format=JSON"))
+        if response.status_code == 200:
+            return safe_json_load(response)
+        else:
+            return json.loads('{"Data": [],"Total Count": 0}')
 
     def get_homepage_important_messages(self):
         """Returns the CALPADS' Homepage Important Messages section in JSON
@@ -75,7 +108,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, '/HomepageImportantMessages?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_homepage_anomaly_status(self):
         """Returns the CALPADS' Homepage Anomaly Status section in JSON format
@@ -84,7 +117,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, '/HomepageAnomalyStatus?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_homepage_certification_status(self):
         """Returns the CALPADS' Homepage Certification Status section in JSON format
@@ -93,7 +126,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, '/HomepageCertificationStatus?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_homepage_submission_status(self):
         """Returns the CALPADS' Homepage Submission Status section in JSON format
@@ -102,7 +135,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, '/HomepageSubmissions?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_homepage_extract_status(self):
         """Returns the CALPADS' Homepage Extract Status section in JSON format
@@ -111,7 +144,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, '/HomepageNotifications?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_enrollment_history(self, ssid):
         """Returns a JSON object with the Enrollment history for the provided SSID
@@ -124,7 +157,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Enrollment?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_demographics_history(self, ssid):
         """Returns a JSON object with the Demographics history for the provided SSID
@@ -137,7 +170,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Demographics?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_address_history(self, ssid):
         """Returns a JSON object with the Address history for the provided SSID
@@ -150,7 +183,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Address?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_elas_history(self, ssid):
         """Returns a JSON object with the English Language Acquisition Status (ELAS) history for the provided SSID
@@ -163,7 +196,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/EnglishLanguageAcquisition?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_program_history(self, ssid):
         """Returns a JSON object with the Program history for the provided SSID
@@ -176,7 +209,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Program?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_student_course_section_history(self, ssid):
         """Returns a JSON object with the Student Course Section history (SCSE, SCSC) for the provided SSID
@@ -189,7 +222,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/StudentCourseSection?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_cte_history(self, ssid):
         """Returns a JSON object with the Career Technical Education (CTE) history for the provided SSID
@@ -202,7 +235,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/CareerTechnicalEducation?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_stas_history(self, ssid):
         """Returns a JSON object with the Student Absence Summary (STAS) history for the provided SSID
@@ -215,7 +248,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/StudentAbsenceSummary?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_sirs_history(self, ssid):
         """Returns a JSON object with the Student Incident Result (SIRS) history for the provided SSID
@@ -228,7 +261,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/StudentIncidentResult?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_soff_history(self, ssid):
         """Returns a JSON object with the Student Offense (SOFF) history for the provided SSID
@@ -241,7 +274,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Offense?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_assessment_history(self, ssid):
         """Returns a JSON object with the Student Offense (SOFF) history for the provided SSID
@@ -254,7 +287,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/Assessment?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_sped_history(self, ssid):
         """Returns a JSON object with the Special Education (SPED) history for the provided SSID
@@ -267,7 +300,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/SPED?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_ssrv_history(self, ssid):
         """Returns a JSON object with the Student Services (SSRV) history for the provided SSID
@@ -280,7 +313,7 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/SSRV?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_psts_history(self, ssid):
         """Returns a JSON object with the Postsecondary Transition Status (PSTS) history for the provided SSID
@@ -293,21 +326,57 @@ class CALPADSClient:
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Student/{ssid}/PSTS?format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
 
     def get_requested_extracts(self, lea_code):
-        """Returns a JSON object with the Postsecondary Transition Status (PSTS) history for the provided SSID
+        """Returns a dictionary object with the a list of extracts at the provided lea_code
 
         Args:
             lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
                 this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
 
         Returns:
-            a JSON object with a Data key
+            a JSON object with a Data key and a total record count key (the name of this key can vary)
             Expected data is under Data as a List where each item is a "row" of data
         """
         response = self.session.get(urljoin(self.host, f'/Extract?SelectedLEA={lea_code}&format=JSON'))
-        return json.loads(response.content)
+        return safe_json_load(response)
+
+    def get_staff_demographics_history(self, seid):
+        """Returns any existing staff demographics history for the provided SEID
+        Args:
+            seid(int, str): the 10 digit CALPADS Statewide Education Identifier
+
+        Returns:
+            a JSON object with a Data key and a total record count key (the name of this key can vary)
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Staff/{seid}/StaffDemographics?format=JSON'))
+        return safe_json_load(response)
+
+    def get_staff_assignments_history(self, seid):
+        """Returns any existing staff assignments history for the provided SEID
+        Args:
+            seid(int, str): the 10 digit CALPADS Statewide Education Identifier
+
+        Returns:
+            a JSON object with a Data key and a total record count key (the name of this key can vary)
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Staff/{seid}/StaffAssignments?format=JSON'))
+        return safe_json_load(response)
+
+    def get_staff_courses_history(self, seid):
+        """Returns any existing staff courses history for the provided SEID
+        Args:
+            seid(int, str): the 10 digit CALPADS Statewide Education Identifier
+
+        Returns:
+            a JSON object with a Data key and a total record count key (the name of this key can vary)
+            Expected data is under Data as a List where each item is a "row" of data
+        """
+        response = self.session.get(urljoin(self.host, f'/Staff/{seid}/StaffCourses?format=JSON'))
+        return safe_json_load(response)
 
     def download_report(self, lea_code, report_code, file_name=None, is_snapshot=False,
                         download_format='CSV', form_data=None, dry_run=False):
@@ -346,6 +415,7 @@ class CALPADSClient:
             if report_url:
                 session.get(report_url)
             else:
+                # TODO: Write a ReportNotFound exception in an exceptions.py module
                 raise Exception("Report Not Found")
             report_page_root = etree.fromstring(self.visit_history[-1].text, parser=etree.HTMLParser(encoding='utf8'))
             iframe_url = report_page_root.xpath("//iframe[@src and not(contains(@src, 'KeepAlive'))]")[0].attrib['src']
@@ -366,8 +436,6 @@ class CALPADSClient:
 
             #self.log.debug('The form data about to be submitted: \n{}\n'.format(submitted_form_data))
             #self.log.debug('These are the data keys about to be submitted: \n{}\n'.format(submitted_form_data.keys()))
-            #TODO: Document that it seems like at a minimum all "select" fields need to have values provided for
-            #Alternatively, provide default values
             session.post(self.visit_history[-1].url, data=submitted_form_data)
 
             # Regex for grabbing the base, direct download URL for the report
@@ -386,11 +454,12 @@ class CALPADSClient:
                 split_query = parse_qsl(query)
 
             if split_query:
-                self.log.debug("Adding Format parameter to the URL")
+                self.log.info("Adding Format parameter to the URL")
                 split_query.append(('Format', REPORTS_DL_FORMAT[download_format.upper()]))
-                self.log.debug("Rejoining the query elements again")
+                self.log.info("Rejoining the query elements again")
                 report_dl_url = urlunsplit([scheme, netloc, path, urlencode(split_query), frag])
                 session.get(report_dl_url)
+                self.log.info("Fetched the report bytes.")
                 # Cautionary Tale here if the content is compressed:
                 # https://stackoverflow.com/a/50825553
                 # Might need to revisit later
@@ -399,6 +468,7 @@ class CALPADSClient:
                     return True
 
             #If you made it this far, something went wrong.
+            self.log.info("Failed to download the report.")
             return False
 
     def request_extract(self, lea_code, extract_name, form_data=None, by_date_range=False,
@@ -446,23 +516,17 @@ class CALPADSClient:
             # Direct URL access for each extract request with a few exceptions for atypical extracts
             # navigate to extract page
             if extract_name == 'SSID':
-                #TODO: Use get_homepage_submission_status and implement the ones needing Job IDs
-                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
-                #session.get('https://www.calpads.org/Extract/SSIDExtract')
+                session.get('https://www.calpads.org/Extract/SSIDExtract')
             elif extract_name == 'DIRECTCERTIFICATION':
                 session.get('https://www.calpads.org/Extract/DirectCertificationExtract')
             elif extract_name == 'REJECTEDRECORDS':
-                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
-                # session.get('https://www.calpads.org/Extract/RejectedRecords')
+                session.get('https://www.calpads.org/Extract/RejectedRecords')
             elif extract_name == 'CANDIDATELIST':
-                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
-                # session.get('https://www.calpads.org/Extract/CandidateList')
+                session.get('https://www.calpads.org/Extract/CandidateList')
             elif extract_name == 'REPLACEMENTSSID':
-                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
-                # session.get('https://www.calpads.org/Extract/ReplacementSSID')
+                session.get('https://www.calpads.org/Extract/ReplacementSSID')
             elif extract_name == 'SPEDDISCREPANCYEXTRACT':
-                raise NotImplementedError("Still in search of a better method to fetch Job IDs.")
-                # session.get('https://www.calpads.org/Extract/SPEDDiscrepancyExtract')
+                session.get('https://www.calpads.org/Extract/SPEDDiscrepancyExtract')
             elif extract_name == 'DSEAEXTRACT':
                 session.get('https://www.calpads.org/Extract/DSEAExtract')
             else:
@@ -496,10 +560,21 @@ class CALPADSClient:
             # Text inputs are not able to submit multiple key values, particularly a problem for Date Range
             filled_fields = extracts_form._filter_text_input_fields(filled_fields)
             #self.log.debug('The submitted form data: {}'.format(filled_fields))
+            if extract_name in ['REJECTEDRECORDS', 'CANDIDATELIST',
+                                'SPEDDISCREPANCYEXTRACT', 'SSID']:
+                check_submitter = [field for field in filled_fields if field[0] == 'Submitter' and field[1] is not None]
+                if not check_submitter:
+                    #If no submitter field is provided, default to the current user
+                    filled_fields.extend([('Submitter', self._get_submitter_id(lea_code, self.username))])
+                check_jobid = [field for field in filled_fields if field[0] == 'JobID' and field[1] is not None]
+                if not check_jobid:
+                    #If no jobid is provided, default to the latest job's job id
+                    filled_fields.extend([('JobID', self.get_homepage_submission_status().get('Data')[-1]['JobID'])])
 
             #self.log.debug('Posting extract request to: {}'.format(urljoin(self.host, chosen_form.attrib['action'])))
             session.post(urljoin(self.host, chosen_form.attrib['action']),
                          data=filled_fields)
+            self.log.info("Attempted to request the extract.")
             success_text = 'Extract request made successfully.  Please check back later for download.'
             request_response = etree.fromstring(self.visit_history[-1].text, parser=etree.HTMLParser(encoding='utf8'))
             try:
@@ -511,7 +586,7 @@ class CALPADSClient:
 
             return success
 
-    def download_extract(self, lea_code, file_name=None, timeout=60, poll=10):
+    def download_extract(self, lea_code, file_name=None, timeout=60, poll=10, return_bytes=False):
         """
         Download the file and give it the provided file_name.
 
@@ -523,11 +598,14 @@ class CALPADSClient:
             timeout (int, optional): how long to wait for a completed extract request.
                 Defaults to 60 seconds.
             poll (float, optional): this is how long to wait between polls to the API to check if the request is
-                complete. This parameter is used in time.sleep(). Defaults to 10 seconds to respect the API, and
+                complete. This parameter is used in time.sleep(). Defaults to 10 seconds to respect the server, and
                 enforces a minimum of 1 second.
+            return_bytes (bool, optional): instead of writing to file and returning True,
+                this will return bytes if a download would have been successful.
 
         Returns:
             bool: True for a successful download of report, else False.
+            bytes: Bytes of a successful download of the report if return_bytes=True
         """
         if poll < 1:
             poll = 1
@@ -544,17 +622,186 @@ class CALPADSClient:
                 #Currently only pulling the first result to check against, assuming it's the latest
                 if result[0]['ExtractStatus'] == 'Complete':
                     extract_request_id = result[0]['ExtractRequestID']
+                    self.log.info("Found an extract request ID")
                     break
                 #Take a breather
                 time.sleep(poll)
-            if extract_request_id:
+            if extract_request_id and not return_bytes:
                 with open(file_name, 'wb') as f:
                     f.write(self._get_extract_bytes(extract_request_id))
                     return True
+            elif extract_request_id and return_bytes:
+                return self._get_extract_bytes(extract_request_id)
             else:
                 self.log.info("Download request timed out. The download might have taken too long.")
                 return False
 
+    def upload_file(self, lea_code, file_path=None, form_data=None, dry_run=False):
+        """
+        Upload the file at file_path to CALPADS.
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+            file_path (str): the path of the file to pass to open(file_name, 'rb'). Assumes any subdirectories
+                parent directories referenced already exist.
+            form_data (list of iterables, optional): a list of the (key, value) pairs to send in the POST request body. To know
+                which keys and values are expected, set dry_run=True. Technically optional, but will silently fail if
+                a required key is missing.
+            dry_run (bool, optional): when False, it uploads the file. When True, it doesn't download the report and instead
+                returns a dict with the form fields and their expected inputs.
+
+        Returns:
+            bool: True for a successful download of report, else False.
+        """
+        if not dry_run:
+            assert file_path and form_data, "File Path and Form Data are required inputs."
+        with self.session as session:
+            self._select_lea(lea_code)
+            session.get("https://www.calpads.org/FileSubmission/FileUpload")
+            root = etree.fromstring(self.visit_history[-1].text,
+                                    etree.HTMLParser(encoding='utf8'))
+            root_form = root.xpath("//div[@id='fileUpload']//form")[0]
+            upload_form = FilesUploadForm(root_form)
+            if dry_run:
+                return upload_form.get_parsed_form_fields()
+            prefilled_form = upload_form.prefilled_fields.copy()
+            prefilled_form.extend(form_data)
+            prefilled_dict = dict(prefilled_form)
+            cleaned_filled_form = {k: v for k,v in prefilled_dict.items() if v != '' and v is not None}
+            with open(file_path, 'rb') as f:
+                file_input = {'FilesUploaded[0].FileName': f}
+                session.post(urljoin(self.visit_history[-1].url, root_form.attrib['action']),
+                             files=file_input,
+                             data=cleaned_filled_form)
+                self.log.info("Attempted to upload the file.")
+            response = etree.fromstring(self.visit_history[-1].text,
+                                        etree.HTMLParser(encoding='utf8'))
+            if response.xpath('//*[contains(@class, "alert alert-success")]'):
+                return True
+            else:
+                return False
+
+    def post_file(self, lea_code, ignore_rejections=False, get_errors=False,
+                  submitter_email=None, timeout=180, poll=30):
+        """
+        Post the most recent file submission, optionally fetching errors and/or ignoring rejected records.
+
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+            ignore_rejections (bool, optional): If True, posts the file and disregards any rejected records. Ignored if
+                there are no rejected records. Defaults to False.
+            get_errors (bool, optional): If True, will fetch the rejected records extract for the latest job and return
+                it as bytes in the second item of the tuple. This takes longer to do. Defaults to False.
+            submitter_email (str, optional): when get_errors is True, one can override the current client username
+                in the request to fetch rejected records. This might be useful if you are looking to post a file
+                that was submitted by another account and get the errors from it if they exist.
+            timeout (int, optional): how long to wait while checking if the file is ready to post AND when get_errors=True,
+                how long to wait for the rejected records extract to download. This isn't cumulative - the timeout variable
+                is simply re-used for each operation (so for timeout=60, if both operations take ~minute to
+                complete successfully, the total time could be 120 seconds, not 60)
+                Defaults to 60 seconds.
+            poll (float, optional): this is how long to wait between polls to the API to check if the request is
+                complete. This parameter is used in time.sleep(). Defaults to 30 seconds to respect the server, and
+                enforces a minimum of 10 seconds.
+
+        Returns:
+            2 item tuple:
+                bool: True for a successful file post else False.
+                bytes: Bytes of the errors if get_errors=True or empty byte string.
+        """
+        if poll < 10:
+            poll = 10
+        errors = b''
+        with self.session as session:
+            self._select_lea(lea_code)
+            start_time = time.time()
+            while (time.time()-start_time) < timeout:
+                #TODO: Need to check that this references the correct data and not stale data
+                #Maybe 'Ready for Review' ensures the date is never stale?
+                get_job_status = self.get_homepage_submission_status().get('Data')[-1]
+                if get_job_status['SubmissionStatus'] == 'Ready for Review':
+                    if get_job_status['Rejected'] == '0':
+                        #safe to post
+                        session.get(f"https://www.calpads.org/FileSubmission/Detail/{get_job_status['JobID']}")
+                        if self._post_file_post_action().xpath('//*[contains(@class, "alert alert-success")]'):
+                            self.log.info("Successfully posted the file.")
+                            return True, errors
+                        else:
+                            self.log.info("Attempted and failed to post the file.")
+                            return False, errors
+                    elif get_job_status['Rejected'] != '0' and ignore_rejections:
+                        #safe-ish to post
+                        self.log.info("There were rejections, but ignoring those rejections.")
+                        if get_errors:
+                            errors = self._get_file_submission_rejections(lea_code,
+                                                                          get_job_status['FileTypeCode']+'ERR',
+                                                                          submitter_email, get_job_status['JobID'],
+                                                                          timeout, poll)
+                        session.get(f"https://www.calpads.org/FileSubmission/Detail/{get_job_status['JobID']}")
+                        if self._post_file_post_action().xpath('//*[contains(@class, "alert alert-success")]'):
+                            self.log.info("Successfully posted the file.")
+                            return True, errors
+                        else:
+                            self.log.info("Attempted and failed to post the file.")
+                            return False, errors
+                    elif get_job_status['Rejected'] != '0' and not ignore_rejections:
+                        if get_errors:
+                            errors = self._get_file_submission_rejections(lea_code,
+                                                                          get_job_status['FileTypeCode']+'ERR',
+                                                                          submitter_email, get_job_status['JobID'],
+                                                                          timeout, poll)
+                        self.log.info("Unable to post the latest job because some records were rejected")
+                        return False, errors
+                else:
+                    time.sleep(poll)
+            self.log.info("Unable to post the latest job, timed out.")
+            return False, errors
+
+    def _get_file_submission_rejections(self, lea_code, record_type, submitter_email,
+                                        job_id, timeout, poll):
+        """Helper for getting the latest file submission's rejected records"""
+        self.log.info("Attempting to fetch the latest submission's rejected records.")
+        if submitter_email:
+            #If an email is not None, try to get the submitter ID
+            submitter_id = self._get_submitter_id(lea_code, submitter_email)
+        else:
+            submitter_id = None
+        submitted_fields = [('LEA', lea_code), ('RecordType', record_type),
+                            ('JobID', job_id), ('Submitter', submitter_id),
+                            ('School', 'All')]
+        success = self.request_extract(lea_code, 'REJECTEDRECORDS', submitted_fields)
+        if success:
+            self.log.info("Successfully requested the rejected records. Attempting download.")
+            return self.download_extract(lea_code, timeout=timeout, poll=poll, return_bytes=True) or b'Failed dowloading extract errors'
+        else:
+            self.log.info("Failed to request the rejected records.")
+            return b'Failed requesting extract errors'
+
+    def _get_submitter_id(self, lea_code, submitter_email):
+        """Tries to return a submitter ID. If it fails, returns the email."""
+        submitter_names = self.get_submitter_names(lea_code)
+        try:
+            return [submitter['Value'] for submitter in submitter_names
+                    if submitter['Text'] == submitter_email][0]
+        except IndexError:
+            self.log.debug("Could not find the id for the submitter email; will use the email as is.")
+            return submitter_email
+
+    def _post_file_post_action(self):
+        """Helper to officially post a file."""
+        root = etree.fromstring(self.visit_history[-1].text,
+                                etree.HTMLParser(encoding='utf8'))
+        form_root = root.xpath('//form[@action="/FileSubmission/Post"]')[0]
+        inputs = FilesUploadForm(form_root).prefilled_fields + [('command', 'Post All')]
+        input_dict = dict(inputs)
+        self.session.post(urljoin(self.host, '/FileSubmission/Post'),
+                       data=input_dict)
+        self.log.info("Attempted to post all for this submission job.")
+        response_root = etree.fromstring(self.visit_history[-1].text,
+                                    etree.HTMLParser(encoding='utf8'))
+        return response_root
     def _get_extract_bytes(self, extract_request_id):
         """Get the extract bytes by extract_request_id. Returns bytes."""
         self.session.get(urljoin(self.host, f'/Extract/DownloadLink?ExtractRequestID={extract_request_id}'))
@@ -597,7 +844,6 @@ class CALPADSClient:
                 session.get('https://www.calpads.org/Report/ODS')
             response = self.visit_history[-1]
             if report_code == '8.1eoy3' and is_snapshot:
-                # TODO: Might add another variable and if-condition to re-use for ODS as well as Snapshot
                 return 'https://www.calpads.org/Report/Snapshot/8_1_StudentProfileList_EOY3_'
             else:
                 root = etree.fromstring(response.text, parser=etree.HTMLParser(encoding='utf8'))
@@ -605,8 +851,7 @@ class CALPADSClient:
                 for element in elements:
                     if report_code == element.text.lower():
                         return urljoin(self.host, element.xpath('./../../a')[0].attrib['href'])
-                #TODO: Write this exception in an exceptions.py
-                #raise ReportNotFound('{} report code cannot be found on the webpage'.format(report_code))
+                self.log.info("Failed to find the provided report code.")
 
     def _handle_event_hooks(self, r, *args, **kwargs):
         """This hook is executed with every HTPP request, primarily used to handle instances of OAuth Dance."""
@@ -661,3 +906,9 @@ class CALPADSClient:
             self.log.debug("No response hook needed for: {}\n".format(r.url))
             self.visit_history.append(r)
             return r
+
+def safe_json_load(response):
+    try:
+        return json.loads(response.content)
+    except JSONDecodeError:
+        return {}
