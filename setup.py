@@ -1,9 +1,9 @@
 from setuptools import setup, find_packages
 
-with open("README.md", "r") as readme:
+with open("README.md", "r", encoding='UTF8') as readme:
     long_description = readme.read()
 
-with open("LICENSE", "r") as li:
+with open("LICENSE", "r", encoding='UTF8') as li:
     lic = li.read()
 
 setup(
