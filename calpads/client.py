@@ -28,7 +28,7 @@ class CALPADSClient:
 
         self.log = logging.getLogger(__name__)
         log_fmt = f'%(levelname)s: %(asctime)s {self.__class__.__name__}.%(funcName)s: %(message)s'
-        logging.basicConfig(format=log_fmt, level=logging.INFO) # Use level=logging.INFO or level=logging.DEBUG
+        logging.basicConfig(format=log_fmt, level=logging.DEBUG) # Use level=logging.INFO or level=logging.DEBUG
 
         try:
             self.__connection_status = self._login()
@@ -107,7 +107,8 @@ class CALPADSClient:
             a dict with a Data key and a total record count key (the name of this key can vary).
             Expected data is under Data as a List where each item is a "row" of data
         """
-        response = self.session.get(urljoin(self.host, '/HomepageImportantMessages?format=JSON'))
+        response = self.session.get(urljoin(self.host, '/HomepageImportantMessages?format=JSON&skip=0&take=5&undefined=0'))
+        self.log.debug(safe_json_load(response).get('Data'))
         return safe_json_load(response)
 
     def get_homepage_anomaly_status(self):
