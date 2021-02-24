@@ -25,11 +25,11 @@ class CALPADSClient:
         self.session.headers.update({'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
         (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36"})
         self.session.hooks['response'].append(self._handle_event_hooks)
+
         self.log = logging.getLogger(__name__)
         log_fmt = f'%(levelname)s: %(asctime)s {self.__class__.__name__}.%(funcName)s: %(message)s'
-        stream_hdlr = logging.StreamHandler()
-        stream_hdlr.setFormatter(logging.Formatter(fmt=log_fmt))
-        self.log.addHandler(stream_hdlr)
+        logging.basicConfig(format=log_fmt, level=logging.INFO) # Use level=logging.INFO or level=logging.DEBUG
+
         try:
             self.__connection_status = self._login()
         except RecursionError:
