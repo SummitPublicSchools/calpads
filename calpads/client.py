@@ -28,7 +28,7 @@ class CALPADSClient:
 
         self.log = logging.getLogger(__name__)
         log_fmt = f'%(levelname)s: %(asctime)s {self.__class__.__name__}.%(funcName)s: %(message)s'
-        logging.basicConfig(format=log_fmt, level=logging.DEBUG) # Use level=logging.INFO or level=logging.DEBUG
+        logging.basicConfig(format=log_fmt, level=logging.INFO) # Use level=logging.INFO or level=logging.DEBUG
 
         try:
             self.__connection_status = self._login()
@@ -435,8 +435,8 @@ class CALPADSClient:
             # TODO: Test how form data treats None or False diferently from empty string
             submitted_form_data = {k: v for k, v in formatted_form_data.items() if v != ''}
 
-            #self.log.debug('The form data about to be submitted: \n{}\n'.format(submitted_form_data))
-            #self.log.debug('These are the data keys about to be submitted: \n{}\n'.format(submitted_form_data.keys()))
+            self.log.debug('The form data about to be submitted: \n{}\n'.format(submitted_form_data))
+            self.log.debug('These are the data keys about to be submitted: \n{}\n'.format(submitted_form_data.keys()))
             session.post(self.visit_history[-1].url, data=submitted_form_data)
 
             # Regex for grabbing the base, direct download URL for the report
