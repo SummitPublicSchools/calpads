@@ -1,10 +1,19 @@
 from setuptools import setup, find_packages
 
-with open("README.md", "r", encoding='UTF8') as readme:
+with open("README.md", "r") as readme:
     long_description = readme.read()
 
-with open("LICENSE", "r", encoding='UTF8') as li:
+with open("LICENSE", "r") as li:
     lic = li.read()
+
+# If you get an encoding error during installation, comment out the above
+# 4 lines and uncomment the 4 lines below instead:
+
+# with open("README.md", "r", encoding='UTF8') as readme:
+#     long_description = readme.read()
+
+# with open("LICENSE", "r", encoding='UTF8') as li:
+#     lic = li.read()
 
 setup(
     name="calpads",
