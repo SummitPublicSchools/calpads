@@ -15,4 +15,4 @@ Here are some of our favorite highlights:
 
 # Installation
 * To get much of this speed gain, we depend on `lxml`. They have specific [installation instructions here](https://lxml.de/installation.html).
-* Recommend pip: `pip install git+https://github.com/SummitPublicSchools/calpads.git@0.5.0`
+* Recommend pip: `pip install git+https://github.com/SummitPublicSchools/calpads.git`
