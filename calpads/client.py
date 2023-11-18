@@ -556,8 +556,22 @@ class CALPADSClient:
             if dry_run:
                 return extracts_form.get_parsed_form_fields()
 
-            filled_fields = extracts_form.prefilled_fields.copy() #Safe to do shallow copy; list contents are immutable
-            filled_fields.extend(form_data + [('ReportingLEA', lea_code)])
+            default_filled_fields = extracts_form.prefilled_fields.copy() #Safe to do shallow copy; list contents are immutable
+            # print('default_filled_fields:', default_filled_fields)
+
+            # Remove any tuples in the default_filled_fields whose keys appear in the user-provided form_data list
+            if form_data is not None and dry_run == False:
+                keys_in_form_data = {key for key, _ in form_data}
+                keys_in_form_data.add('ReportingLEA') # This will be added below based on lea_code
+                # print('keys_in_form_data:', keys_in_form_data)
+                filtered_filled_fields = [item for item in default_filled_fields if item[0] not in keys_in_form_data]
+                # print('filtered_filled_fields:', filtered_filled_fields)
+            else:
+                filtered_filled_fields = default_filled_fields
+
+            filtered_filled_fields.extend(form_data + [('ReportingLEA', lea_code)])
+            filled_fields = filtered_filled_fields
+
             # Text inputs are not able to submit multiple key values, particularly a problem for Date Range
             filled_fields = extracts_form._filter_text_input_fields(filled_fields)
             #self.log.debug('The submitted form data: {}'.format(filled_fields))
@@ -571,6 +585,8 @@ class CALPADSClient:
                 if not check_jobid:
                     #If no jobid is provided, default to the latest job's job id
                     filled_fields.extend([('JobID', self.get_homepage_submission_status().get('Data')[-1]['JobID'])])
+
+            # print('filled_fields:', filled_fields)
 
             #self.log.debug('Posting extract request to: {}'.format(urljoin(self.host, chosen_form.attrib['action'])))
             session.post(urljoin(self.host, chosen_form.attrib['action']),
