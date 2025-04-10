@@ -1,7 +1,7 @@
 # calpads
 An unofficial Python Web API wrapper for California Department of Education's CALPADS.
 
-[Version 0.5.0](https://github.com/yo-my-bard/calpads/tree/0.5.0) is pretty great and covers many use-cases. Given its lack of official support, the wrapper is subject to break at any moment if the internals of CALPADS magic change.
+[Version 0.6.0](https://github.com/SummitPublicSchools/calpads/tree/0.6.0) is pretty great and covers many use-cases. Given its lack of official support, the wrapper is subject to break at any moment if the internals of CALPADS magic change.
 
 # We Have Documentation!
 Supported endpoints, downloads, and other features are [documented in our GitBook website](https://summit-public-schools.gitbook.io/calpads-api/).
