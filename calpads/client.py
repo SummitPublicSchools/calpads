@@ -380,7 +380,7 @@ class CALPADSClient:
         return safe_json_load(response)
 
     def download_report(self, lea_code, report_code, file_name=None, is_snapshot=False,
-                        download_format='CSV', form_data=None, dry_run=False):
+                        download_format='CSV', form_data=None, dry_run=False, url_override=None):
         """Download CALPADS ODS or Snapshot Reports
 
         Args:
@@ -398,6 +398,8 @@ class CALPADSClient:
                 form need to be provided. To see list of valid values, set dry_run=True.
             dry_run (bool): when False, it downloads the report. When True, it doesn't download the report and instead
                 returns a dict with the form fields and their expected inputs.
+            url_override (str): optional parameter to override _get_report_link() method with hardcoded url. Used for
+                when a report url is not included on the ODS webpage.
 
         Returns:
             bool: True for a successful download of report, else False.
@@ -412,7 +414,10 @@ class CALPADSClient:
             file_name = 'data'
         with self.session as session:
             self._select_lea(lea_code)
-            report_url = self._get_report_link(report_code.lower(), is_snapshot)
+            if url_override is None:
+                report_url = self._get_report_link(report_code.lower(), is_snapshot)
+            else:
+                report_url = url_override
             if report_url:
                 session.get(report_url)
             else:
