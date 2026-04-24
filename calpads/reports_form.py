@@ -155,7 +155,7 @@ class ReportsForm:
                         continue
                     to_submit[formname] = formval
                 elif self.complete_parse[paramname][1][0] in ('textbox', 'textbox_defaultnull'): #TODO: defaultnull still needs testing
-                    formname = self.complete_parse[paramname][1][1]
+                    formname = self.complete_parse[paramname][1][1][1]
                     to_submit[formname] = paramvalue
             else:
                 self.log.info("Provided input was not processed: {}".format(paramname))

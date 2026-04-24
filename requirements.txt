@@ -1,0 +1,6 @@
+playwright
+    #run 'playwright install chromium' as well
+requests
+lxml
+pandas
+openpyxl
