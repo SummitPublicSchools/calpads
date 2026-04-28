@@ -67,15 +67,6 @@ class CALPADSClient:
     def _post(self, url, **kwargs):
         kwargs.setdefault("timeout", self.timeout)
         return self.session.post(url, **kwargs)
-    
-    def _login(self):
-        """Login method which generally doesn't need to be called except when initializing the client."""
-        self._get(self.host)
-        return (
-            bool(self.visit_history)
-            and self.visit_history[-1].status_code == 200
-            and self.visit_history[-1].url.rstrip("/") == self.host.rstrip("/")
-        )
 
     @property
     def is_connected(self):
@@ -230,6 +221,14 @@ class CALPADSClient:
         }
 
     def get_requested_extracts(self, lea_code):
+        """Returns a dictionary object with the a list of extracts at the provided lea_code
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+        Returns:
+            a JSON object with a Data key and a total record count key (the name of this key can vary)
+            Expected data is under Data as a List where each item is a "row" of data
+        """
         response = self._get(urljoin(self.host, f"/Extract?SelectedLEA={lea_code}&format=JSON"))
         return safe_json_load(response)
 
@@ -320,115 +319,140 @@ class CALPADSClient:
         self.log.info("Failed to download the report.")
         return False
 
-    def request_extract(
-        self,
-        lea_code,
-        extract_name,
-        form_data=None,
-        by_date_range=False,
-        by_as_of_date=False,
-        dry_run=False,
-    ):
+    def request_extract(self, lea_code, extract_name, form_data=None, by_date_range=False,
+                        by_as_of_date=False, dry_run=False):
+        """
+        Request an extract with the extract_name from CALPADS.
+        For Direct Certification Extract, pass in extract_name='DirectCertification'.
+        For DSEA Extract, pass in extract_name='DSEAExtract'
+        For the others, use their abbreviated acronym, e.g. SENR, SELA, etc.
+        When dry_run is true, this returns a dict with suggestions for form_data inputs. The keys are the keys,
+        the values are options for valid values. If the value is str, then any string is allowed. Date parameters
+        will provide a value with formatting instructions (namely, MM/DD/YYYY). Select fields have dict values in
+        the form of: {'FieldName': {'_allows_multiple': True, 'val1': 'internal_val'}. The expected input should
+        look like form_data = [('FieldName', 'internal_val')], that is take the key of dict, and the value of the
+        nested dict. 'val1' is the value dispalyed in the UI. If '_allows_multiple' is False, then only one of those
+        field keys should be sent in the request. If '_allows_multiple' is True, then the key can have multiple values.
+        A common example is schools: [('School', '0000001'), ('School', '0000002')] for NPS and Private schools.
+        Args:
+            lea_code (str): string of the seven digit number found next to your LEA name in the org select menu. For most LEAs,
+                this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
+            extract_name (str): generally the four letter acronym of the extract. e.g. SENR, SELA, etc.
+                For Direct Certification Extract, pass in extract_name='DirectCertification'.
+                Spelling matters, capitalization does not. Silently fails if report name is unrecognized/not supported.
+            form_data (list of iterables, optional): a list of the (key, value) pairs to send in the POST request body. To know
+                which keys and values are expected, set dry_run=True. Technically optional, but will silently fail if
+                a required key is missing.
+            by_date_range (bool, optional): some extracts can be requested with a date range parameter.
+                Set to True to use date range.
+            by_as_of_date (bool, optional): used only in CENR to fill out the As of Date form. If by_date_range is True,
+                this is ignored.
+            dry_run (bool): when False, it downloads the report. When True, it doesn't download the report and instead
+                returns a dict with the form fields and their expected inputs.
+        Returns:
+            bool: True if extract request was successful, False if it was not successful.
+            dict: when dry_run=True, it returns a dict of the form fields and their expected inputs for report manipulation
+        """
         extract_name = extract_name.upper()
-        form_data = list(form_data or [])
+        if not form_data:
+            form_data = list()
+        with self.session as session:
+            self._select_lea(lea_code)
+            self._get(self._get_extract_request_url(extract_name))
+            root = etree.fromstring(self.visit_history[-1].text, etree.HTMLParser(encoding='utf8'))
 
-        self._select_lea(lea_code)
-        self._get(self._get_extract_request_url(extract_name))
-        root = etree.fromstring(self.visit_history[-1].text, etree.HTMLParser(encoding="utf8"))
+            #In the past, for SPED and SSRV extracts, CALPADS showed SELPA and NonSELPA form options.
+            #They have either removed or only show by permission levels, so we won't add that extra layer, for now.
+            if by_date_range:
+                try:
+                    if extract_name != 'CENR':
+                        chosen_form = root.xpath('//form[contains(@action, "Extract") and contains(@action, "Date")]')[0]
+                    else:
+                        chosen_form = root.xpath('//form[contains(@action, "Extract") and contains(@action, "DateRange")]')[0]
+                except IndexError:
+                    self.log.info("There is no By Date Range request option. Falling back to the default form option.")
+                    chosen_form = root.xpath('//form[contains(@action, "Extract") and not(contains(@action, "Date"))]')[0]
+            elif extract_name == 'CENR' and by_as_of_date:
+                chosen_form = root.xpath('//form[contains(@action, "Extract") and contains(@action, "AsofDate")]')[0]
+            else:
+                chosen_form = root.xpath('//form[contains(@action, "Extract") and not(contains(@action, "Date"))]')[0]
 
-        if by_date_range:
+            extracts_form = ExtractsForm(chosen_form)
+            if dry_run:
+                return extracts_form.get_parsed_form_fields()
+
+            default_filled_fields = extracts_form.prefilled_fields.copy() #Safe to do shallow copy; list contents are immutable
+            # print('default_filled_fields:', default_filled_fields)
+
+            # Remove any tuples in the default_filled_fields whose keys appear in the user-provided form_data list
+            if form_data is not None and dry_run == False:
+                keys_in_form_data = {key for key, _ in form_data}
+                keys_in_form_data.add('ReportingLEA') # This will be added below based on lea_code
+                # print('keys_in_form_data:', keys_in_form_data)
+                filtered_filled_fields = [item for item in default_filled_fields if item[0] not in keys_in_form_data]
+                # print('filtered_filled_fields:', filtered_filled_fields)
+            else:
+                filtered_filled_fields = default_filled_fields
+
+            filtered_filled_fields.extend(form_data + [('ReportingLEA', lea_code)])
+            filled_fields = filtered_filled_fields
+
+            # Text inputs are not able to submit multiple key values, particularly a problem for Date Range
+            filled_fields = extracts_form._filter_text_input_fields(filled_fields)
+            #self.log.debug('The submitted form data: {}'.format(filled_fields))
+            if extract_name in ['REJECTEDRECORDS', 'CANDIDATELIST',
+                                'SPEDDISCREPANCYEXTRACT', 'SSID']:
+                check_submitter = [field for field in filled_fields if field[0] == 'Submitter' and field[1] is not None]
+                if not check_submitter:
+                    #If no submitter field is provided, default to the current user
+                    filled_fields.extend([('Submitter', self._get_submitter_id(lea_code, self.username))])
+                check_jobid = [field for field in filled_fields if field[0] == 'JobID' and field[1] is not None]
+                if not check_jobid:
+                    #If no jobid is provided, default to the latest job's job id
+                    filled_fields.extend([('JobID', self.get_homepage_submission_status().get('Data')[-1]['JobID'])])
+
+            # print('filled_fields:', filled_fields)
+
+            #self.log.debug('Posting extract request to: {}'.format(urljoin(self.host, chosen_form.attrib['action'])))
+            session.post(urljoin(self.host, chosen_form.attrib['action']),
+                         data=filled_fields)
+            self.log.info("Attempted to request the extract.")
+            success_text = 'Extract request made successfully.  Please check back later for download.'
+            request_response = etree.fromstring(self.visit_history[-1].text, parser=etree.HTMLParser(encoding='utf8'))
             try:
-                if extract_name != "CENR":
-                    chosen_form = root.xpath(
-                        '//form[contains(@action, "Extract") and contains(@action, "Date")]'
-                    )[0]
-                else:
-                    chosen_form = root.xpath(
-                        '//form[contains(@action, "Extract") and contains(@action, "DateRange")]'
-                    )[0]
+                #self.log.debug(request_response.xpath('//p')[0].text)
+                success = (success_text == request_response.xpath('//p')[0].text)
             except IndexError:
-                self.log.info(
-                    "There is no By Date Range request option. Falling back to the default form option."
-                )
-                chosen_form = root.xpath(
-                    '//form[contains(@action, "Extract") and not(contains(@action, "Date"))]'
-                )[0]
-        elif extract_name == "CENR" and by_as_of_date:
-            chosen_form = root.xpath(
-                '//form[contains(@action, "Extract") and contains(@action, "AsofDate")]'
-            )[0]
-        else:
-            chosen_form = root.xpath(
-                '//form[contains(@action, "Extract") and not(contains(@action, "Date"))]'
-            )[0]
+                #self.log.debug('Was not able to find a paragraph tag')
+                success = False
 
-        extracts_form = ExtractsForm(chosen_form)
-        if dry_run:
-            return extracts_form.get_parsed_form_fields()
-
-        default_filled_fields = extracts_form.prefilled_fields.copy()
-        keys_in_form_data = {key for key, _ in form_data}
-        keys_in_form_data.add("ReportingLEA")
-        filtered_filled_fields = [
-            item for item in default_filled_fields if item[0] not in keys_in_form_data
-        ]
-
-        filtered_filled_fields.extend(form_data + [("ReportingLEA", lea_code)])
-        filled_fields = extracts_form._filter_text_input_fields(filtered_filled_fields)
-
-        if extract_name in ["REJECTEDRECORDS", "CANDIDATELIST", "SPEDDISCREPANCYEXTRACT", "SSID"]:
-            check_submitter = [
-                field for field in filled_fields if field[0] == "Submitter" and field[1] is not None
-            ]
-            if not check_submitter:
-                filled_fields.extend([("Submitter", self._get_submitter_id(lea_code, self.username))])
-
-            check_jobid = [
-                field for field in filled_fields if field[0] == "JobID" and field[1] is not None
-            ]
-            if not check_jobid:
-                submissions = self.get_homepage_submission_status().get("Data") or []
-                if submissions:
-                    filled_fields.extend([("JobID", submissions[-1]["JobID"])])
-
-        self._post(urljoin(self.host, chosen_form.attrib["action"]), data=filled_fields)
-        self.log.info("Attempted to request the extract.")
-
-        success_text = "Extract request made successfully.  Please check back later for download."
-        request_response = etree.fromstring(
-            self.visit_history[-1].text,
-            parser=etree.HTMLParser(encoding="utf8"),
-        )
-        paragraph_text = " ".join(
-            text.strip() for text in request_response.xpath("//p/text()") if text.strip()
-        )
-        return success_text in paragraph_text
+            return success
 
     def download_extract(
         self,
         lea_code,
         file_name=None,
         timeout=60,
-        poll=10,
-        return_bytes=False,
-        extract_name=False
+        poll=30,
+        return_bytes=True
     ):
-        if poll < 1:
-            poll = 1
-        if not file_name:
-            file_name = 'data'
-
+        #TODO: Check also for type and download date, all that good stuff
         with self.session as session:
             self._select_lea(lea_code)
             time_start = time.time()
             extract_request_id = None
-
+            
             while (time.time() - time_start) < timeout:
-                result = self.get_requested_extracts(lea_code).get("Data") or []
-                extract_request_id = self._find_completed_extract_request_id(result, extract_name)
-                if extract_request_id:
+                result = self.get_requested_extracts(lea_code).get('Data')
+                self.log.debug(result)
+                print(result)
+                
+                #Currently only pulling the first result to check against, assuming it's the latest
+                if result[0]['ExtractStatus'] == 'Complete':
+                    extract_request_id = result[0]['ExtractRequestID']
                     self.log.info("Found an extract request ID")
                     break
+               
                 time.sleep(poll)
 
             if extract_request_id and not return_bytes:
@@ -782,9 +806,6 @@ class CALPADSClient:
 
 def safe_json_load(response):
     try:
-        return response.json()
-    except (JSONDecodeError, ValueError, AttributeError):
-        try:
-            return json.loads(response.content)
-        except (JSONDecodeError, TypeError):
-            return {}
+        return json.loads(response.content)
+    except JSONDecodeError:
+        return {}
