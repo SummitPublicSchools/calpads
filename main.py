@@ -13,38 +13,38 @@ OUTPUT_DIR = Path("G:/Shared drives/Data & Analytics/Source Docs/Exports and Dow
 
 
 def build_authenticated_session_via_playwright():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
+    p = sync_playwright().start()
+    browser = p.chromium.launch(headless=False)
+    context = browser.new_context(accept_downloads=True)
+    page = context.new_page()
 
-        page.goto("https://www.calpads.org/", wait_until="domcontentloaded")
+    page.goto("https://www.calpads.org/", wait_until="domcontentloaded")
 
-        print("\nComplete CALPADS login/MFA in the browser.")
-        input("After you are fully logged in, press Enter here... ")
+    print("\nComplete CALPADS login/MFA in the browser.")
+    input("After you are fully logged in, press Enter here... ")
 
-        cookies = context.cookies()
+    cookies = context.cookies()
 
-        session = requests.Session()
-        session.headers.update(
-            {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/122.0.0.0 Safari/537.36"
-                )
-            }
+    session = requests.Session()
+    session.headers.update(
+        {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            )
+        }
+    )
+
+    for cookie in cookies:
+        session.cookies.set(
+            name=cookie["name"],
+            value=cookie["value"],
+            domain=cookie.get("domain"),
+            path=cookie.get("path", "/"),
         )
 
-        for cookie in cookies:
-            session.cookies.set(
-                name=cookie["name"],
-                value=cookie["value"],
-                domain=cookie.get("domain"),
-                path=cookie.get("path", "/"),
-            )
-
-        return session
+    return session
 
 
 def enable_http_debug(session):
@@ -111,7 +111,7 @@ def main():
 
     extracts_map = {
         "SENR": "SENR",
-        #"SELA": "SELA",
+        "SELA": "SELA",
         #"SINF": "SINF",
         #"SWDS": "SWDS",
         #"SPRG": "SPRG",
@@ -119,7 +119,7 @@ def main():
     }
 
     report_urls_map = {
-        #"Accountability/16_21_StudentswithDisabilities_OverduePlanReviewandReevaluationMeetingsStudentList": "16.21",
+        "Accountability/16_21_StudentswithDisabilities_OverduePlanReviewandReevaluationMeetingsStudentList": "16.21",
         #"Accountability/16_14_StudentswithDisabilitiesPlanStudentListbyDSEA": "16.14",
         #"Realtime/5_7_FosterYouthEnrolledStudentListrt": "5.7",
         #"Realtime/5_9_FormerFosterYouthEnrolledStudentListrt": "5.9",
@@ -129,7 +129,7 @@ def main():
         #"0126193": "MV",
         #"0122556": "HW",
         #"0140749": "EV",
-        #"0139832": "WV",
+        "0139832": "WV",
         "0126177": "SL"
     }
 
@@ -137,7 +137,7 @@ def main():
         #"MV": "Mar Vista",
         #"HW": "Hollywood",
         #"EV": "East Valley",
-        #"WV": "West Valley",
+        "WV": "West Valley",
         "SL": "Silver Lake"
     }
 
@@ -197,16 +197,16 @@ def main():
                     print(f"Request may have failed for {filename} / {abbrev}")
                     continue
 
-                time.sleep(10)
+                #time.sleep(10)
 
-                extract_bytes = cc.download_extract(
-                    lea_code=lea_code,
-                    file_name=Path(OUTPUT_DIR) / f"{abbrev} - {extract}.txt"
-                )
+                #extract_bytes = cc.download_extract(
+                #    lea_code=lea_code,
+                #    file_name=Path(OUTPUT_DIR) / f"{abbrev} - {extract}.txt"
+                #)
 
-                if not extract_bytes:
-                    print(f"Download failed for {filename} / {abbrev}")
-                    continue
+                #if not extract_bytes:
+                #    print(f"Download failed for {filename} / {abbrev}")
+                #    continue
 
             except Exception as e:
                 print(f"{filename} failed for {abbrev}: {e}")
