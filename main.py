@@ -16,11 +16,14 @@ def build_authenticated_session_via_playwright():
     p = sync_playwright().start()
     browser = p.chromium.launch(headless=False)
     context = browser.new_context(accept_downloads=True)
-    page = context.new_page()
+    
+    calpadspage = context.new_page()
+    calpadspage.goto("https://www.calpads.org/")
 
-    page.goto("https://www.calpads.org/", wait_until="domcontentloaded")
+    gmailpage = context.new_page()
+    gmailpage.goto("https://gmail.com/")
 
-    print("\nComplete CALPADS login/MFA in the browser.")
+    print("\nComplete CALPADS and Gmail login.")
     input("After you are fully logged in, press Enter here... ")
 
     cookies = context.cookies()
@@ -44,7 +47,7 @@ def build_authenticated_session_via_playwright():
             path=cookie.get("path", "/"),
         )
 
-    return session
+    return session, gmailpage
 
 
 def enable_http_debug(session):
@@ -104,7 +107,7 @@ extracts_base_input = [
 ]
 
 def main():
-    session = build_authenticated_session_via_playwright()
+    session, gmailpage  = build_authenticated_session_via_playwright()
 
     cc = CALPADSClient(session=session)
     enable_http_debug(cc.session)
@@ -119,7 +122,7 @@ def main():
     }
 
     report_urls_map = {
-        "Accountability/16_21_StudentswithDisabilities_OverduePlanReviewandReevaluationMeetingsStudentList": "16.21",
+        #"Accountability/16_21_StudentswithDisabilities_OverduePlanReviewandReevaluationMeetingsStudentList": "16.21",
         #"Accountability/16_14_StudentswithDisabilitiesPlanStudentListbyDSEA": "16.14",
         #"Realtime/5_7_FosterYouthEnrolledStudentListrt": "5.7",
         #"Realtime/5_9_FormerFosterYouthEnrolledStudentListrt": "5.9",
@@ -144,34 +147,35 @@ def main():
     #get reports
     for report_url, report in report_urls_map.items():
         for lea_code, abbrev in lea_map.items():
-            for abbrev, schoolname in lea_schoolname_map.items():
+            
+            schoolname = lea_schoolname_map.get(abbrev)
 
-                try:
-                    print("=================================================")
-                    print(f"Downloading {report} for {abbrev}")
+            try:
+                print("=================================================")
+                print(f"Downloading {report} for {abbrev}")
 
-                    request_ok = cc.download_report(
-                        lea_code=lea_code,
-                        form_data=
-                        {
-                            "LEA": f"Citizens of the World Charter School {schoolname}",
-                            "School": {f"Citizens of the World Charter School {schoolname}-{lea_code}":True},
-                            "AsOfMonth": datetime.today().strftime("%B"),
-                            "AsOfDay": str(datetime.today().day)
-                        }
-                        ,
-                        report_code=report,
-                        file_name=Path(OUTPUT_DIR) / f"{abbrev} - {report}.csv",
-                        url_override=f"https://www.calpads.org/Report/{report_url}"
-                    )
+                request_ok = cc.download_report(
+                    lea_code=lea_code,
+                    form_data=
+                    {
+                        "LEA": f"Citizens of the World Charter School {schoolname}",
+                        "School": {f"Citizens of the World Charter School {schoolname}-{lea_code}":True},
+                        "AsOfMonth": datetime.today().strftime("%B"),
+                        "AsOfDay": str(datetime.today().day)
+                    }
+                    ,
+                    report_code=report,
+                    file_name=Path(OUTPUT_DIR) / f"{abbrev} - {report}.csv",
+                    url_override=f"https://www.calpads.org/Report/{report_url}"
+                )
 
-                    if not request_ok:
-                        print(f"Request may have failed for {report} / {abbrev}")
-                        continue
+                if not request_ok:
+                    print(f"Request may have failed for {report} / {abbrev}")
+                    continue
 
-                except Exception as e:
-                    print(f"{report} failed for {abbrev}: {e}")
-                    print(traceback.format_exc())
+            except Exception as e:
+                print(f"{report} failed for {abbrev}: {e}")
+                print(traceback.format_exc())
 
     print(" Reports done")
 
@@ -179,7 +183,8 @@ def main():
     #get extracts
     for extract, filename in extracts_map.items():
         for lea_code, abbrev in lea_map.items():
-            form_data = [("School", lea_code)] + extracts_base_input
+            form_data = [("School", lea_code),
+                         ("FileName", f"{abbrev}  -  {filename}")] + extracts_base_input
 
             try:
                 print("=================================================")
@@ -197,8 +202,6 @@ def main():
                     print(f"Request may have failed for {filename} / {abbrev}")
                     continue
 
-                #time.sleep(10)
-
                 #extract_bytes = cc.download_extract(
                 #    lea_code=lea_code,
                 #    file_name=Path(OUTPUT_DIR) / f"{abbrev} - {extract}.txt"
@@ -212,7 +215,48 @@ def main():
                 print(f"{filename} failed for {abbrev}: {e}")
                 print(traceback.format_exc())
 
+            MAX_WAIT = 120  # seconds
+            POLL_INTERVAL = 5  # seconds
+
+            start = time.time()
+
+            while True:
+                gmailpage.wait_for_selector("input[aria-label='Search mail']")
+
+                gmailpage.fill("input[aria-label='Search mail']", "from:noreply@calpads.org is:unread")
+                gmailpage.wait_for_timeout(1500)
+                gmailpage.keyboard.press("Enter")
+                gmailpage.wait_for_timeout(3000)
+
+                rows = gmailpage.locator("div[role='main'] tr.zE:visible")
+                noresults = gmailpage.locator("text=No messages matched")
+
+                if rows.count() > 0 and noresults.count() == 0:
+                    print("Email found!")
+                    rows.first.click()
+                    break
+
+                if time.time() - start > 180:
+                    raise TimeoutError("No CALPADS email arrived in time")
+                
+                print("Waiting for email...")
+                time.sleep(10)
+                gmailpage.reload()
+                
+
+            with gmailpage.expect_download() as download_info:
+                gmailpage.click("a[href*='DownloadLink']")
+
+            download = download_info.value
+            save_path = Path(OUTPUT_DIR) / f"{abbrev} - {filename}.txt"
+            download.save_as(str(save_path))
+
+            gmailpage.goto("https:/gmail.com")
+
+            print("Saved to:", save_path)
+
     print(" Extracts done")
+    
     return "Done!"
 
 
