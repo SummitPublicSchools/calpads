@@ -308,6 +308,10 @@ class CALPADSClient:
             )
             split_query = parse_qsl(query)
 
+        print(split_query, flush=True)
+        print(form_data, flush=True)
+        print(formatted_form_data, flush=True)
+
         if split_query:
             split_query.append(("Format", REPORTS_DL_FORMAT[download_format.upper()]))
             report_dl_url = urlunsplit([scheme, netloc, path, urlencode(split_query), frag])

@@ -1,6 +1,9 @@
 playwright
-    #run 'playwright install chromium' as well
+    #run 'playwright install chromium'
 requests
 lxml
 pandas
 openpyxl
+google-cloud-bigquery
+    # run 'gcloud auth application-default login'
+pyarrow

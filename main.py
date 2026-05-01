@@ -2,6 +2,8 @@ import logging
 import time
 import traceback
 import requests
+import pandas as pd
+from google.cloud import bigquery
 from calpads.client import CALPADSClient
 from datetime import datetime
 from pathlib import Path
@@ -9,8 +11,7 @@ from playwright.sync_api import sync_playwright
 
 logging.basicConfig(level=logging.INFO)
 
-OUTPUT_DIR = Path("G:/Shared drives/Data & Analytics/Source Docs/Exports and Downloads/Pre-Cleaned Exports/")
-
+dest_dir = Path("G:/Shared drives/Data & Analytics/Source Docs/BQ Sources/CALPADS")
 
 def build_authenticated_session_via_playwright():
     p = sync_playwright().start()
@@ -48,8 +49,6 @@ def build_authenticated_session_via_playwright():
         )
 
     return session, gmailpage
-
-
 def enable_http_debug(session):
     original_get = session.get
     original_post = session.post
@@ -88,61 +87,55 @@ def enable_http_debug(session):
 
     #session.get = debug_get
     session.post = debug_post
-
-extracts_base_input = [
-    ("RecordHistory", "Y"),
-    ("School", "0000001"),
-    ("School", "0000002"),
-    ("StartDate", "07/01/2021"),
-    ("EnrollmentStartDate", "07/01/2021"),
-    ("EndDate", "06/30/2026"),
-    ("EnrollmentEndDate", "06/30/2026"),
-    ("SpecialEducationStatus", "1"),
-    ("SpecialEducationStatus", "2"),
-    ("SpecialEducationStatus", "3"),
-    ("SpecialEducationStatus", "4"),
-    ("CertificationStatusCode", "All"),
-    ("EducationProgramCode", "All"),
-    ("ActiveStudent", False)
-]
-
 def main():
-    session, gmailpage  = build_authenticated_session_via_playwright()
-
-    cc = CALPADSClient(session=session)
-    enable_http_debug(cc.session)
-
+    extracts_base_input = [
+        ("RecordHistory", "Y"),
+        ("School", "0000001"),
+        ("School", "0000002"),
+        ("StartDate", "07/01/2021"),
+        ("EnrollmentStartDate", "07/01/2021"),
+        ("EndDate", "06/30/2026"),
+        ("EnrollmentEndDate", "06/30/2026"),
+        ("SpecialEducationStatus", "1"),
+        ("SpecialEducationStatus", "2"),
+        ("SpecialEducationStatus", "3"),
+        ("SpecialEducationStatus", "4"),
+        ("CertificationStatusCode", "All"),
+        ("EducationProgramCode", "All"),
+        ("ActiveStudent", False)
+    ]
     extracts_map = {
-        "SENR": "SENR",
-        "SELA": "SELA",
+        #"SENR": "SENR",
+        #"SELA": "SELA",
         #"SINF": "SINF",
         #"SWDS": "SWDS",
         #"SPRG": "SPRG",
         #"DIRECTCERTIFICATION": "DirectCert",
     }
-
     report_urls_map = {
-        #"Accountability/16_21_StudentswithDisabilities_OverduePlanReviewandReevaluationMeetingsStudentList": "16.21",
+        "Accountability/16_21_StudentswithDisabilities_OverduePlanReviewandReevaluationMeetingsStudentList": "16.21",
         #"Accountability/16_14_StudentswithDisabilitiesPlanStudentListbyDSEA": "16.14",
         #"Realtime/5_7_FosterYouthEnrolledStudentListrt": "5.7",
         #"Realtime/5_9_FormerFosterYouthEnrolledStudentListrt": "5.9",
     }
-
     lea_map = {
         #"0126193": "MV",
         #"0122556": "HW",
-        #"0140749": "EV",
-        "0139832": "WV",
-        "0126177": "SL"
+        "0140749": "EV",
+        #"0139832": "WV",
+        #"0126177": "SL"
     }
-
     lea_schoolname_map = {
         #"MV": "Mar Vista",
         #"HW": "Hollywood",
-        #"EV": "East Valley",
-        "WV": "West Valley",
-        "SL": "Silver Lake"
+        "EV": "East Valley",
+        #"WV": "West Valley",
+        #"SL": "Silver Lake"
     }
+    
+    session, gmailpage  = build_authenticated_session_via_playwright()
+    cc = CALPADSClient(session=session)
+    enable_http_debug(cc.session)
 
     #get reports
     for report_url, report in report_urls_map.items():
@@ -152,7 +145,7 @@ def main():
 
             try:
                 print("=================================================")
-                print(f"Downloading {report} for {abbrev}")
+                print(f"Downloading {report} for {abbrev} {schoolname}")
 
                 request_ok = cc.download_report(
                     lea_code=lea_code,
@@ -165,7 +158,7 @@ def main():
                     }
                     ,
                     report_code=report,
-                    file_name=Path(OUTPUT_DIR) / f"{abbrev} - {report}.csv",
+                    file_name=Path(dest_dir) / "Reports" / f"{abbrev} - {report}.csv",
                     url_override=f"https://www.calpads.org/Report/{report_url}"
                 )
 
@@ -176,9 +169,7 @@ def main():
             except Exception as e:
                 print(f"{report} failed for {abbrev}: {e}")
                 print(traceback.format_exc())
-
     print(" Reports done")
-
 
     #get extracts
     for extract, filename in extracts_map.items():
@@ -202,21 +193,9 @@ def main():
                     print(f"Request may have failed for {filename} / {abbrev}")
                     continue
 
-                #extract_bytes = cc.download_extract(
-                #    lea_code=lea_code,
-                #    file_name=Path(OUTPUT_DIR) / f"{abbrev} - {extract}.txt"
-                #)
-
-                #if not extract_bytes:
-                #    print(f"Download failed for {filename} / {abbrev}")
-                #    continue
-
             except Exception as e:
                 print(f"{filename} failed for {abbrev}: {e}")
                 print(traceback.format_exc())
-
-            MAX_WAIT = 120  # seconds
-            POLL_INTERVAL = 5  # seconds
 
             start = time.time()
 
@@ -243,22 +222,27 @@ def main():
                 time.sleep(10)
                 gmailpage.reload()
                 
+            gmailpage.wait_for_timeout(2000)
+            new_message_banner = gmailpage.locator("text=/new message|new messages/i")
+
+            if new_message_banner.count() > 0:
+                gmailpage.wait_for_timeout(1500)
+                gmailpage.locator("span[data-id='u']").last.click()
+                gmailpage.wait_for_timeout(1000)
 
             with gmailpage.expect_download() as download_info:
-                gmailpage.click("a[href*='DownloadLink']")
+                links = gmailpage.locator("a[href*='DownloadLink']")
+                links.last.click()
 
             download = download_info.value
-            save_path = Path(OUTPUT_DIR) / f"{abbrev} - {filename}.txt"
+            save_path = Path(dest_dir) / "Extracts" / f"{abbrev} - {filename}.txt"
             download.save_as(str(save_path))
 
             gmailpage.goto("https:/gmail.com")
 
             print("Saved to:", save_path)
-
     print(" Extracts done")
     
     return "Done!"
-
-
 if __name__ == "__main__":
     main()
