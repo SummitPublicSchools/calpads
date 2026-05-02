@@ -105,32 +105,32 @@ def main():
         ("ActiveStudent", False)
     ]
     extracts_map = {
-        #"SENR": "SENR",
-        #"SELA": "SELA",
-        #"SINF": "SINF",
-        #"SWDS": "SWDS",
-        #"SPRG": "SPRG",
-        #"DIRECTCERTIFICATION": "DirectCert",
+        "SENR": "SENR",
+        "SELA": "SELA",
+        "SINF": "SINF",
+        "SWDS": "SWDS",
+        "SPRG": "SPRG",
+        "DIRECTCERTIFICATION": "DirectCert",
     }
     report_urls_map = {
         "Accountability/16_21_StudentswithDisabilities_OverduePlanReviewandReevaluationMeetingsStudentList": "16.21",
-        #"Accountability/16_14_StudentswithDisabilitiesPlanStudentListbyDSEA": "16.14",
-        #"Realtime/5_7_FosterYouthEnrolledStudentListrt": "5.7",
-        #"Realtime/5_9_FormerFosterYouthEnrolledStudentListrt": "5.9",
+        "Accountability/16_14_StudentswithDisabilitiesPlanStudentListbyDSEA": "16.14",
+        "Realtime/5_7_FosterYouthEnrolledStudentListrt": "5.7",
+        "Realtime/5_9_FormerFosterYouthEnrolledStudentListrt": "5.9",
     }
     lea_map = {
-        #"0126193": "MV",
-        #"0122556": "HW",
+        "0126193": "MV",
+        "0122556": "HW",
         "0140749": "EV",
-        #"0139832": "WV",
-        #"0126177": "SL"
+        "0139832": "WV",
+        "0126177": "SL"
     }
     lea_schoolname_map = {
-        #"MV": "Mar Vista",
-        #"HW": "Hollywood",
+        "MV": "Mar Vista",
+        "HW": "Hollywood",
         "EV": "East Valley",
-        #"WV": "West Valley",
-        #"SL": "Silver Lake"
+        "WV": "West Valley",
+        "SL": "Silver Lake"
     }
     
     session, gmailpage  = build_authenticated_session_via_playwright()
