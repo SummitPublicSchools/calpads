@@ -400,11 +400,24 @@ class CALPADSClient:
                 this is the CD part of the County-District-School (CDS) code. For independently reporting charters, it's the S.
 
         Returns:
-            a JSON object with a Data key and a total record count key (the name of this key can vary)
-            Expected data is under Data as a List where each item is a "row" of data
+            a list of dictionaries where each dictionary represents a single extract for the LEA; the most recently requested
+            extract should be first in the list
         """
-        response = self.session.get(urljoin(self.host, f'/Extract?SelectedLEA={lea_code}&format=JSON'))
-        return safe_json_load(response)
+        response = self.session.get(urljoin(self.host, f'/Extract'))
+        html_content = response.text
+
+        match = re.search(r'"Data":(\[.*?\]),"TotalCount"', html_content)
+    
+        if not match:
+            self.log.info("Could not find the Data array in the response.")
+            return []
+
+        json_str = match.group(1)
+        data = json.loads(json_str)
+
+        # self.log.info(json.dumps(data, indent=4))
+        
+        return data
 
     def get_staff_demographics_history(self, seid):
         """Returns any existing staff demographics history for the provided SEID
@@ -702,7 +715,7 @@ class CALPADSClient:
             time_start = time.time()
             extract_request_id = None
             while (time.time() - time_start) < timeout:
-                result = self.get_requested_extracts(lea_code).get('Data')
+                result = self.get_requested_extracts(lea_code)
                 # self.log.debug(result)
                 #Currently only pulling the first result to check against, assuming it's the latest
                 if result[0]['ExtractStatus'] == 'Complete':
